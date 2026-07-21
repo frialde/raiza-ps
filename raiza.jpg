@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="blueRedStripes" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#004d98" />
+      <stop offset="16.6%" stop-color="#004d98" />
+      <stop offset="16.6%" stop-color="#a50044" />
+      <stop offset="33.3%" stop-color="#a50044" />
+      <stop offset="33.3%" stop-color="#004d98" />
+      <stop offset="50%" stop-color="#004d98" />
+      <stop offset="50%" stop-color="#a50044" />
+      <stop offset="66.6%" stop-color="#a50044" />
+      <stop offset="66.6%" stop-color="#004d98" />
+      <stop offset="83.3%" stop-color="#004d98" />
+      <stop offset="83.3%" stop-color="#a50044" />
+      <stop offset="100%" stop-color="#a50044" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background Canvas -->
+  <rect width="1024" height="1024" fill="#111827"/>
+
+  <!-- Left: Front View Jersey -->
+  <g transform="translate(50, 100)">
+    <!-- Body -->
+    <rect x="50" y="100" width="300" height="400" rx="20" fill="url(#blueRedStripes)" />
+    <!-- Sleeves -->
+    <path d="M 50,120 L -20,200 L 20,240 L 50,180 Z" fill="#004d98" />
+    <path d="M 350,120 L 420,200 L 380,240 L 350,180 Z" fill="#004d98" />
+    <!-- Collar -->
+    <path d="M 150,100 Q 200,150 250,100" fill="none" stroke="#edbb00" stroke-width="12" />
+    <!-- Spotify Logo -->
+    <circle cx="200" cy="280" r="30" fill="none" stroke="#ffffff" stroke-width="6"/>
+    <text x="200" y="340" font-family="sans-serif" font-weight="bold" font-size="28" fill="#ffffff" text-anchor="middle">Spotify</text>
+    <!-- Barca Crest -->
+    <rect x="90" y="150" width="40" height="40" fill="#edbb00" rx="5"/>
+    <!-- Nike swoosh -->
+    <path d="M 290,165 Q 310,160 320,170 Q 305,172 290,165" fill="#ffffff" />
+    <!-- Shorts -->
+    <rect x="70" y="510" width="260" height="180" rx="10" fill="#002454" />
+    <!-- Front Text -->
+    <text x="200" y="80" font-family="sans-serif" font-weight="900" font-size="32" fill="#edbb00" text-anchor="middle">RAIZA TANIA</text>
+  </g>
+
+  <!-- Right: Back View Jersey -->
+  <g transform="translate(550, 100)">
+    <!-- Body -->
+    <rect x="50" y="100" width="300" height="400" rx="20" fill="url(#blueRedStripes)" />
+    <!-- Sleeves -->
+    <path d="M 50,120 L -20,200 L 20,240 L 50,180 Z" fill="#004d98" />
+    <path d="M 350,120 L 420,200 L 380,240 L 350,180 Z" fill="#004d98" />
+    <!-- Name on Back -->
+    <text x="200" y="180" font-family="sans-serif" font-weight="bold" font-size="36" fill="#edbb00" text-anchor="middle" letter-spacing="4">RAIZA TANIA</text>
+    <!-- Number 13 -->
+    <text x="200" y="360" font-family="sans-serif" font-weight="900" font-size="160" fill="#edbb00" text-anchor="middle">13</text>
+    <!-- Unicef Logo -->
+    <text x="200" y="440" font-family="sans-serif" font-weight="bold" font-size="22" fill="#ffffff" text-anchor="middle">unicef ❤️</text>
+    <!-- Shorts -->
+    <rect x="70" y="510" width="260" height="180" rx="10" fill="#002454" />
+  </g>
+</svg>

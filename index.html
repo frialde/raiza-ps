@@ -1,0 +1,1646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Raiza Penalty Shootout</title>
+  
+  <!-- Three.js CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Playfair+Display:ital,wght@0,700;1,700&display=swap" rel="stylesheet">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #064e3b;
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #ffffff;
+      touch-action: none;
+    }
+
+    #game-container {
+      width: 100vw;
+      height: 100vh;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+
+    /* Confetti Canvas */
+    #confetti-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 50;
+    }
+
+    /* Top HUD Overlay */
+    #hud {
+      position: absolute;
+      top: env(safe-area-inset-top, 16px);
+      left: 16px;
+      right: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .hud-group {
+      display: flex;
+      gap: 12px;
+    }
+
+    .hud-card {
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 20px;
+      padding: 8px 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    }
+
+    .hud-label {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      color: #fbcfe8;
+      text-transform: uppercase;
+    }
+
+    .hud-val {
+      font-size: 22px;
+      font-weight: 900;
+      color: #facc15;
+      line-height: 1.1;
+      font-style: italic;
+    }
+
+    .hud-btn {
+      pointer-events: auto;
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 50%;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    }
+
+    .hud-btn:active {
+      transform: scale(0.9);
+      background: rgba(236, 72, 153, 0.3);
+    }
+
+    .hud-btn svg {
+      width: 24px;
+      height: 24px;
+      fill: none;
+      stroke: #ffffff;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* Aim Arc Helper Canvas */
+    #aim-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    /* Swipe Instruction Hint */
+    #swipe-guide {
+      position: absolute;
+      bottom: calc(env(safe-area-inset-bottom, 20px) + 36px);
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 8;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+    }
+
+    .swipe-hand {
+      font-size: 36px;
+      animation: swipeAnim 1.8s infinite ease-in-out;
+      filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5));
+    }
+
+    .swipe-text {
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      padding: 8px 20px;
+      border-radius: 24px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: #ffffff;
+      text-transform: uppercase;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    @keyframes swipeAnim {
+      0% { transform: translateY(10px) scale(0.95); opacity: 0.5; }
+      50% { transform: translateY(-28px) scale(1.15); opacity: 1; }
+      100% { transform: translateY(10px) scale(0.95); opacity: 0.5; }
+    }
+
+    /* Modals & Overlays - Vibrant Palette */
+    .modal-backdrop {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(6, 30, 20, 0.72);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+      padding: 20px;
+      transition: opacity 0.35s ease, visibility 0.35s ease;
+    }
+
+    .modal-hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    /* Start Card */
+    .modal-card {
+      background: #ffffff;
+      color: #171717;
+      border-radius: 36px;
+      padding: 36px 28px;
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 25px 70px rgba(0, 0, 0, 0.5), inset 0 2px 0 rgba(255, 255, 255, 0.9);
+      border-bottom: 8px solid #fbcfe8;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+      position: relative;
+      overflow: hidden;
+      animation: modalPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes modalPop {
+      0% { transform: scale(0.85); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .badge-tag {
+      background: #fce7f3;
+      color: #db2777;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 1.5px;
+      padding: 6px 16px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      box-shadow: 0 2px 8px rgba(219, 39, 119, 0.15);
+    }
+
+    .game-title {
+      font-size: 34px;
+      font-weight: 900;
+      font-style: italic;
+      text-transform: uppercase;
+      line-height: 1.05;
+      letter-spacing: -0.8px;
+      color: #111827;
+    }
+
+    .title-accent {
+      color: #db2777;
+    }
+
+    .player-card-preview {
+      background: #fdf2f8;
+      border: 1px solid #fbcfe8;
+      border-radius: 20px;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      width: 100%;
+      text-align: left;
+    }
+
+    .avatar-circle {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #004d98, #a50044);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 22px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      flex-shrink: 0;
+    }
+
+    .player-name {
+      font-size: 15px;
+      font-weight: 900;
+      color: #1e1b4b;
+      letter-spacing: 0.5px;
+    }
+
+    .player-sub {
+      font-size: 12px;
+      color: #db2777;
+      font-weight: 700;
+    }
+
+    .instructions-text {
+      font-size: 14px;
+      color: #4b5563;
+      line-height: 1.5;
+      font-weight: 600;
+    }
+
+    /* Vibrant Green Button */
+    .btn-primary {
+      width: 100%;
+      padding: 18px 24px;
+      background: #22c55e;
+      color: #ffffff;
+      border: none;
+      border-radius: 24px;
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      box-shadow: 0 10px 0 #15803d, 0 16px 30px rgba(34, 197, 94, 0.35);
+      transition: all 0.15s ease;
+    }
+
+    .btn-primary:active {
+      transform: translateY(6px);
+      box-shadow: 0 4px 0 #15803d, 0 8px 16px rgba(34, 197, 94, 0.25);
+    }
+
+    .author-footer {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      color: #9ca3af;
+      font-size: 13px;
+      font-weight: 600;
+      margin-top: -6px;
+    }
+
+    .author-footer svg {
+      width: 16px;
+      height: 16px;
+      fill: #ec4899;
+    }
+
+    /* Goal Modal Styling - Gold/Pink Celebration */
+    .modal-card-gold {
+      background: linear-gradient(160deg, #2e1065, #0f172a);
+      color: #ffffff;
+      border: 3px solid #fbbf24;
+      border-bottom: 8px solid #f59e0b;
+      box-shadow: 0 25px 80px rgba(251, 191, 36, 0.35);
+    }
+
+    .goal-header-banner {
+      font-size: 32px;
+      font-weight: 900;
+      color: #fde047;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      font-style: italic;
+      animation: bannerPulse 1.2s infinite alternate;
+      text-shadow: 0 4px 16px rgba(253, 224, 71, 0.5);
+    }
+
+    @keyframes bannerPulse {
+      0% { transform: scale(1); }
+      100% { transform: scale(1.08); }
+    }
+
+    .heart-pulse {
+      font-size: 56px;
+      animation: heartBeat 1.2s infinite;
+      filter: drop-shadow(0 4px 16px rgba(236, 72, 153, 0.6));
+    }
+
+    @keyframes heartBeat {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.25); }
+    }
+
+    .victory-message {
+      font-family: 'Playfair Display', serif;
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.45;
+      color: #fef08a;
+      padding: 0 8px;
+    }
+
+    .victory-subtext {
+      font-size: 14px;
+      color: #f472b6;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .btn-gold {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #1e1b4b;
+      box-shadow: 0 10px 0 #b45309, 0 16px 30px rgba(245, 158, 11, 0.4);
+    }
+
+    .btn-gold:active {
+      transform: translateY(6px);
+      box-shadow: 0 4px 0 #b45309;
+    }
+
+    /* Fail Modal Styling */
+    .modal-card-fail {
+      background: #1e293b;
+      color: #ffffff;
+      border: 2px solid #ef4444;
+      border-bottom: 8px solid #b91c1c;
+      box-shadow: 0 25px 60px rgba(239, 68, 68, 0.3);
+    }
+
+    .fail-header {
+      font-size: 28px;
+      font-weight: 900;
+      color: #f87171;
+      letter-spacing: 1px;
+      font-style: italic;
+      text-transform: uppercase;
+    }
+
+    .fail-message {
+      font-size: 22px;
+      font-weight: 800;
+      color: #f8fafc;
+    }
+
+    .btn-retry-style {
+      background: #475569;
+      color: #ffffff;
+      box-shadow: 0 10px 0 #1e293b, 0 12px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .btn-retry-style:active {
+      transform: translateY(6px);
+      box-shadow: 0 4px 0 #1e293b;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Main 3D Canvas Container -->
+  <div id="game-container"></div>
+
+  <!-- Trajectory Arc Overlay -->
+  <canvas id="aim-canvas"></canvas>
+
+  <!-- HUD Overlay -->
+  <div id="hud">
+    <div class="hud-group">
+      <div class="hud-card">
+        <span class="hud-label">SHOTS</span>
+        <span id="score-shots" class="hud-val">0</span>
+      </div>
+      <div class="hud-card">
+        <span class="hud-label">GOALS</span>
+        <span id="score-goals" class="hud-val">0</span>
+      </div>
+    </div>
+    
+    <button id="btn-mute" class="hud-btn" aria-label="Toggle Mute">
+      <!-- Sound On Icon -->
+      <svg id="icon-sound-on" viewBox="0 0 24 24">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+        <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+      </svg>
+      <!-- Sound Off Icon -->
+      <svg id="icon-sound-off" viewBox="0 0 24 24" style="display: none;">
+        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+        <line x1="23" y1="9" x2="17" y2="15"></line>
+        <line x1="17" y1="9" x2="23" y2="15"></line>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Swipe Instruction Guide -->
+  <div id="swipe-guide">
+    <div class="swipe-hand">👆</div>
+    <div class="swipe-text">Swipe up to kick</div>
+  </div>
+
+  <!-- Start Modal (Vibrant Palette) -->
+  <div id="modal-start" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="badge-tag">RALPH FRIALDE PRESENTS</div>
+      <h1 class="game-title">RAIZA <span class="title-accent">PENALTY</span> SHOOTOUT</h1>
+      
+      <div class="player-card-preview">
+        <div class="avatar-circle">⚽</div>
+        <div>
+          <div class="player-name">RAIZA TANIA #13</div>
+          <div class="player-sub">Star Striker • FC Barcelona</div>
+        </div>
+      </div>
+
+      <p class="instructions-text">
+        Swipe up or tap-drag to kick the ball and score a goal against the keeper!
+      </p>
+
+      <button id="btn-start" class="btn-primary">START GAME</button>
+
+      <div class="author-footer">
+        <svg viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"></path></svg>
+        <span>For my beautiful Raiza</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Success Modal (GOAL) -->
+  <div id="modal-success" class="modal-backdrop modal-hidden">
+    <div class="modal-card modal-card-gold">
+      <div class="goal-header-banner">🎉 GOAL! 🎉</div>
+      <div class="heart-pulse">❤️</div>
+      <h2 class="victory-message">
+        You have won your fifth monthsary date with Ralph Frialde! ❤️
+      </h2>
+      <p class="victory-subtext">Happy 5th Monthsary, my love!</p>
+      <button id="btn-replay" class="btn-primary btn-gold">REPLAY GAME ⚽</button>
+    </div>
+  </div>
+
+  <!-- Fail Modal (MISSED/SAVED) -->
+  <div id="modal-fail" class="modal-backdrop modal-hidden">
+    <div class="modal-card modal-card-fail">
+      <div id="fail-title" class="fail-header">SAVED!</div>
+      <h2 class="fail-message">Try Again.</h2>
+      <button id="btn-retry" class="btn-primary btn-retry-style">RETRY SHOT 🔄</button>
+    </div>
+  </div>
+
+  <!-- Confetti Canvas -->
+  <canvas id="confetti-canvas"></canvas>
+
+  <!-- Game Logic Script -->
+  <script>
+    // --- Web Audio API Sound Synthesizer ---
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+        this.ambientNode = null;
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      playWhistle() {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        
+        // Dual tone whistle
+        [1850, 2150].forEach(freq => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now);
+          
+          // Vibrato
+          const lfo = this.ctx.createOscillator();
+          const lfoGain = this.ctx.createGain();
+          lfo.frequency.value = 25;
+          lfoGain.gain.value = 40;
+          lfo.connect(osc.frequency);
+          lfo.start(now);
+          lfo.stop(now + 0.45);
+
+          gain.gain.setValueAtTime(0, now);
+          gain.gain.linearRampToValueAtTime(0.12, now + 0.05);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+
+          osc.start(now);
+          osc.stop(now + 0.45);
+        });
+      }
+
+      playKick() {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+
+        // Sub bass thump
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(110, now);
+        osc.frequency.exponentialRampToValueAtTime(35, now + 0.15);
+
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.15);
+
+        // Noise impact
+        const bufferSize = this.ctx.sampleRate * 0.08;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 600;
+
+        const noiseGain = this.ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.3, now);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+        noise.connect(filter);
+        filter.connect(noiseGain);
+        noiseGain.connect(this.ctx.destination);
+
+        noise.start(now);
+      }
+
+      playPostHit() {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(750, now);
+        osc.frequency.exponentialRampToValueAtTime(200, now + 0.3);
+
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.3);
+      }
+
+      playGoalCheer() {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const duration = 2.5;
+
+        // Stadium crowd cheer noise
+        const bufferSize = this.ctx.sampleRate * duration;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(800, now);
+        filter.frequency.linearRampToValueAtTime(1400, now + 1.0);
+        filter.Q.value = 1.2;
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.01, now);
+        gain.gain.linearRampToValueAtTime(0.35, now + 0.3);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        noise.start(now);
+      }
+
+      playDisappointment() {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        
+        // Aww groan sound
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(160, now);
+        osc.frequency.linearRampToValueAtTime(90, now + 0.8);
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 400;
+
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(now);
+        osc.stop(now + 0.8);
+      }
+
+      startCrowdAmbient() {
+        if (this.ambientNode || !this.ctx) return;
+        const duration = 4.0;
+        const bufferSize = this.ctx.sampleRate * duration;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        noise.loop = true;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 350;
+
+        const gain = this.ctx.createGain();
+        gain.gain.value = this.muted ? 0 : 0.04;
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        noise.start();
+        this.ambientNode = { noise, gain };
+      }
+
+      toggleMute() {
+        this.muted = !this.muted;
+        if (this.ambientNode) {
+          this.ambientNode.gain.gain.value = this.muted ? 0 : 0.04;
+        }
+        return this.muted;
+      }
+    }
+
+    const soundEngine = new SoundEngine();
+
+    // --- Confetti FX System ---
+    class ConfettiSystem {
+      constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.particles = [];
+        this.active = false;
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+      }
+
+      resize() {
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+      }
+
+      spawn() {
+        this.particles = [];
+        this.active = true;
+        const colors = ['#a50044', '#004d98', '#fbbf24', '#f43f5e', '#10b981', '#3b82f6'];
+        
+        for (let i = 0; i < 120; i++) {
+          this.particles.push({
+            x: this.canvas.width / 2 + (Math.random() * 100 - 50),
+            y: this.canvas.height / 2 + (Math.random() * 100 - 50),
+            vx: (Math.random() - 0.5) * 18,
+            vy: (Math.random() - 0.8) * 22,
+            size: Math.random() * 10 + 6,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            rotation: Math.random() * Math.PI * 2,
+            rotSpeed: (Math.random() - 0.5) * 0.2,
+            shape: Math.random() > 0.3 ? 'rect' : 'heart',
+            opacity: 1
+          });
+        }
+        this.animate();
+      }
+
+      animate() {
+        if (!this.active) return;
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        let stillAlive = false;
+        this.particles.forEach(p => {
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vy += 0.4; // gravity
+          p.vx *= 0.98;
+          p.rotation += p.rotSpeed;
+          p.opacity -= 0.006;
+
+          if (p.opacity > 0) {
+            stillAlive = true;
+            this.ctx.save();
+            this.ctx.translate(p.x, p.y);
+            this.ctx.rotate(p.rotation);
+            this.ctx.globalAlpha = Math.max(0, p.opacity);
+            this.ctx.fillStyle = p.color;
+
+            if (p.shape === 'rect') {
+              this.ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 1.5);
+            } else {
+              // Draw small heart
+              this.ctx.beginPath();
+              this.ctx.arc(-p.size/4, -p.size/4, p.size/3, 0, Math.PI * 2);
+              this.ctx.arc(p.size/4, -p.size/4, p.size/3, 0, Math.PI * 2);
+              this.ctx.fill();
+            }
+            this.ctx.restore();
+          }
+        });
+
+        if (stillAlive) {
+          requestAnimationFrame(() => this.animate());
+        } else {
+          this.active = false;
+        }
+      }
+
+      stop() {
+        this.active = false;
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      }
+    }
+
+    // --- Texture Generator (Procedural Barcelona Kit & Ball) ---
+    function createBarcaKitTexture(customImage = null) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+
+      // Base Navy Background
+      ctx.fillStyle = '#0a1128';
+      ctx.fillRect(0, 0, 1024, 1024);
+
+      // Vertical Blue and Garnet Red Stripes
+      const stripeW = 64;
+      for (let x = 0; x < 1024; x += stripeW * 2) {
+        ctx.fillStyle = '#004d98'; // Barca Blue
+        ctx.fillRect(x, 0, stripeW, 1024);
+        ctx.fillStyle = '#a50044'; // Barca Red
+        ctx.fillRect(x + stripeW, 0, stripeW, 1024);
+      }
+
+      // Front Jersey Details (Left Half of Texture)
+      // Collar
+      ctx.fillStyle = '#edbb00';
+      ctx.fillRect(100, 40, 312, 16);
+
+      // Spotify Logo
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.arc(256, 320, 36, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 32px Outfit, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Spotify', 256, 390);
+
+      // Barca Badge
+      ctx.fillStyle = '#edbb00';
+      ctx.fillRect(140, 180, 50, 50);
+
+      // Back Jersey Details (Right Half of Texture)
+      // Name: "RAIZA TANIA"
+      ctx.fillStyle = '#edbb00';
+      ctx.font = '900 48px Outfit, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('RAIZA TANIA', 768, 220);
+
+      // Number: "13"
+      ctx.font = '900 180px Outfit, sans-serif';
+      ctx.fillText('13', 768, 420);
+
+      // Unicef Logo
+      ctx.font = '700 28px Outfit, sans-serif';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText('unicef ❤️', 768, 500);
+
+      // Draw uploaded custom photo into head region if provided
+      if (customImage) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(256, 120, 70, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(customImage, 186, 50, 140, 140);
+        ctx.restore();
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      return texture;
+    }
+
+    function createSoccerBallTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, 512, 256);
+
+      ctx.fillStyle = '#111827';
+      // Draw pentagon grid pattern
+      const rows = 4, cols = 8;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if ((r + c) % 2 === 0) {
+            const x = c * (512 / cols) + 32;
+            const y = r * (256 / rows) + 32;
+            ctx.beginPath();
+            for (let i = 0; i < 5; i++) {
+              const angle = (i * 2 * Math.PI) / 5 - Math.PI / 2;
+              const px = x + 20 * Math.cos(angle);
+              const py = y + 20 * Math.sin(angle);
+              if (i === 0) ctx.moveTo(px, py);
+              else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      }
+      return new THREE.CanvasTexture(canvas);
+    }
+
+    function createGrassTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      // Striped lawn
+      ctx.fillStyle = '#225424';
+      ctx.fillRect(0, 0, 512, 512);
+
+      ctx.fillStyle = '#1a431c';
+      const stripeWidth = 64;
+      for (let y = 0; y < 512; y += stripeWidth * 2) {
+        ctx.fillRect(0, y, 512, stripeWidth);
+      }
+
+      // Add noise grass flecks
+      ctx.fillStyle = '#2d6a30';
+      for (let i = 0; i < 2000; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        ctx.fillRect(x, y, 2, 4);
+      }
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(12, 12);
+      return texture;
+    }
+
+    // --- Main 3D Game Class ---
+    class PenaltyGame {
+      constructor() {
+        this.container = document.getElementById('game-container');
+        this.shots = 0;
+        this.goals = 0;
+        this.gameState = 'IDLE'; // IDLE, AIMING, KICKED, RESULT
+        
+        this.setupScene();
+        this.setupStadium();
+        this.setupEntities();
+        this.setupPhysics();
+        this.setupControls();
+
+        this.confetti = new ConfettiSystem(document.getElementById('confetti-canvas'));
+
+        window.addEventListener('resize', () => this.onResize());
+        this.animate(0);
+      }
+
+      setupScene() {
+        this.scene = new THREE.Scene();
+        this.scene.background = new THREE.Color(0x0a0f1d);
+        this.scene.fog = new THREE.FogExp2(0x0a0f1d, 0.012);
+
+        this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+        // Positioned 3rd-person behind ball looking toward goal
+        this.defaultCamPos = new THREE.Vector3(0, 1.8, 14.8);
+        this.defaultCamTarget = new THREE.Vector3(0, 1.2, 0);
+        this.camera.position.copy(this.defaultCamPos);
+        this.camera.lookAt(this.defaultCamTarget);
+
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.renderer.shadowMap.enabled = true;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.container.appendChild(this.renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.6);
+        this.scene.add(ambientLight);
+
+        const mainSun = new THREE.DirectionalLight(0xfffaed, 1.1);
+        mainSun.position.set(15, 30, 20);
+        mainSun.castShadow = true;
+        mainSun.shadow.mapSize.width = 1024;
+        mainSun.shadow.mapSize.height = 1024;
+        mainSun.shadow.camera.near = 0.5;
+        mainSun.shadow.camera.far = 60;
+        mainSun.shadow.camera.left = -15;
+        mainSun.shadow.camera.right = 15;
+        mainSun.shadow.camera.top = 15;
+        mainSun.shadow.camera.bottom = -5;
+        this.scene.add(mainSun);
+
+        // Stadium Floodlights
+        [
+          [-22, 18, -10],
+          [22, 18, -10],
+          [-22, 18, 25],
+          [22, 18, 25]
+        ].forEach(pos => {
+          const spot = new THREE.SpotLight(0xffffff, 0.8, 80, Math.PI / 4, 0.5);
+          spot.position.set(...pos);
+          spot.target.position.set(0, 1, 0);
+          this.scene.add(spot);
+          this.scene.add(spot.target);
+
+          // Volumetric light beam cone
+          const beamGeo = new THREE.ConeGeometry(3, 22, 16, 1, true);
+          beamGeo.translate(0, -11, 0);
+          beamGeo.rotateX(Math.PI / 2);
+          const beamMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.08,
+            side: THREE.DoubleSide
+          });
+          const beam = new THREE.Mesh(beamGeo, beamMat);
+          beam.position.set(...pos);
+          beam.lookAt(0, 1, 0);
+          this.scene.add(beam);
+        });
+      }
+
+      setupStadium() {
+        // Grass Pitch
+        const pitchGeo = new THREE.PlaneGeometry(120, 120);
+        const pitchMat = new THREE.MeshStandardMaterial({
+          map: createGrassTexture(),
+          roughness: 0.8,
+          metalness: 0.1
+        });
+        const pitch = new THREE.Mesh(pitchGeo, pitchMat);
+        pitch.rotation.x = -Math.PI / 2;
+        pitch.receiveShadow = true;
+        this.scene.add(pitch);
+
+        // White Line Markings
+        const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+        // Goal Line
+        const goalLine = new THREE.Mesh(new THREE.PlaneGeometry(20, 0.12), lineMat);
+        goalLine.rotation.x = -Math.PI / 2;
+        goalLine.position.set(0, 0.01, 0);
+        this.scene.add(goalLine);
+
+        // Penalty Box (16.5m x 40m)
+        const boxTop = new THREE.Mesh(new THREE.PlaneGeometry(22, 0.12), lineMat);
+        boxTop.rotation.x = -Math.PI / 2;
+        boxTop.position.set(0, 0.01, 16.5);
+        this.scene.add(boxTop);
+
+        const boxLeft = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 16.5), lineMat);
+        boxLeft.rotation.x = -Math.PI / 2;
+        boxLeft.position.set(-11, 0.01, 8.25);
+        this.scene.add(boxLeft);
+
+        const boxRight = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 16.5), lineMat);
+        boxRight.rotation.x = -Math.PI / 2;
+        boxRight.position.set(11, 0.01, 8.25);
+        this.scene.add(boxRight);
+
+        // Penalty Spot Circle (x:0, z:11)
+        const spotGeo = new THREE.CircleGeometry(0.2, 32);
+        const spotMesh = new THREE.Mesh(spotGeo, lineMat);
+        spotMesh.rotation.x = -Math.PI / 2;
+        spotMesh.position.set(0, 0.015, 11.0);
+        this.scene.add(spotMesh);
+
+        // Goal Frame (Posts & Crossbar)
+        const postMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.2, metalness: 0.2 });
+        const postRadius = 0.08;
+        const goalWidth = 7.32;
+        const goalHeight = 2.44;
+
+        // Left Post
+        const leftPost = new THREE.Mesh(new THREE.CylinderGeometry(postRadius, postRadius, goalHeight, 16), postMat);
+        leftPost.position.set(-goalWidth / 2, goalHeight / 2, 0);
+        leftPost.castShadow = true;
+        this.scene.add(leftPost);
+
+        // Right Post
+        const rightPost = new THREE.Mesh(new THREE.CylinderGeometry(postRadius, postRadius, goalHeight, 16), postMat);
+        rightPost.position.set(goalWidth / 2, goalHeight / 2, 0);
+        rightPost.castShadow = true;
+        this.scene.add(rightPost);
+
+        // Crossbar
+        const crossbar = new THREE.Mesh(new THREE.CylinderGeometry(postRadius, postRadius, goalWidth, 16), postMat);
+        crossbar.rotation.z = Math.PI / 2;
+        crossbar.position.set(0, goalHeight, 0);
+        crossbar.castShadow = true;
+        this.scene.add(crossbar);
+
+        // Goal Net
+        const netMat = new THREE.MeshBasicMaterial({
+          color: 0xe2e8f0,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.4
+        });
+        const netGeo = new THREE.BoxGeometry(goalWidth, goalHeight, 1.8);
+        this.netMesh = new THREE.Mesh(netGeo, netMat);
+        this.netMesh.position.set(0, goalHeight / 2, -0.9);
+        this.scene.add(this.netMesh);
+
+        // Stadium Wall & Audience LED Board
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 });
+        const backWall = new THREE.Mesh(new THREE.BoxGeometry(60, 12, 1), wallMat);
+        backWall.position.set(0, 6, -12);
+        this.scene.add(backWall);
+
+        // LED Sponsor Banner
+        const ledCanvas = document.createElement('canvas');
+        ledCanvas.width = 1024;
+        ledCanvas.height = 128;
+        const ledCtx = ledCanvas.getContext('2d');
+        ledCtx.fillStyle = '#a50044';
+        ledCtx.fillRect(0, 0, 1024, 128);
+        ledCtx.fillStyle = '#fbbf24';
+        ledCtx.font = '900 42px Outfit, sans-serif';
+        ledCtx.textAlign = 'center';
+        ledCtx.fillText('RAIZA & RALPH • 5TH MONTHSARY • FC BARCELONA • RAIZA #13', 512, 80);
+
+        const ledTex = new THREE.CanvasTexture(ledCanvas);
+        const ledMat = new THREE.MeshBasicMaterial({ map: ledTex });
+        const ledBoard = new THREE.Mesh(new THREE.PlaneGeometry(30, 2), ledMat);
+        ledBoard.position.set(0, 1, -2.5);
+        this.scene.add(ledBoard);
+      }
+
+      setupEntities() {
+        // Football
+        const ballRadius = 0.22;
+        const ballGeo = new THREE.SphereGeometry(ballRadius, 32, 32);
+        const ballMat = new THREE.MeshStandardMaterial({
+          map: createSoccerBallTexture(),
+          roughness: 0.3,
+          metalness: 0.1
+        });
+        this.ball = new THREE.Mesh(ballGeo, ballMat);
+        this.ball.castShadow = true;
+        this.ballPos = new THREE.Vector3(0, ballRadius, 11.0);
+        this.ball.position.copy(this.ballPos);
+        this.scene.add(this.ball);
+
+        // Ball Shadow Plane
+        const shadowMat = new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          transparent: true,
+          opacity: 0.4
+        });
+        this.ballShadow = new THREE.Mesh(new THREE.CircleGeometry(0.25, 16), shadowMat);
+        this.ballShadow.rotation.x = -Math.PI / 2;
+        this.ballShadow.position.set(0, 0.02, 11.0);
+        this.scene.add(this.ballShadow);
+
+        // Kicker Mesh (Raiza)
+        this.kickerGroup = new THREE.Group();
+        this.kickerMat = createBarcaKitTexture();
+
+        // Load custom image texture if raiza.jpg exists in root
+        const texLoader = new THREE.TextureLoader();
+        texLoader.load('raiza.jpg', (loadedTex) => {
+          this.kickerMat = loadedTex;
+          this.kickerBodyMat.map = loadedTex;
+          this.kickerBodyMat.needsUpdate = true;
+        }, undefined, () => {
+          // Texture fallback handled by procedural kit
+        });
+
+        this.kickerBodyMat = new THREE.MeshStandardMaterial({ map: this.kickerMat, roughness: 0.5 });
+        const skinMat = new THREE.MeshStandardMaterial({ color: 0xf5d0c5, roughness: 0.6 });
+        const bootMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.4 });
+        const hairMat = new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 0.9 });
+
+        // Torso
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.65, 0.26), this.kickerBodyMat);
+        torso.position.y = 1.05;
+        torso.castShadow = true;
+        this.kickerGroup.add(torso);
+
+        // Head & Hair Bun
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 16), skinMat);
+        head.position.y = 1.52;
+        head.castShadow = true;
+        this.kickerGroup.add(head);
+
+        const hairBun = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 16), hairMat);
+        hairBun.position.set(0, 1.62, -0.12);
+        this.kickerGroup.add(hairBun);
+
+        // Legs
+        this.kickerLeftLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.07, 0.65), skinMat);
+        this.kickerLeftLeg.position.set(-0.14, 0.45, 0);
+        this.kickerLeftLeg.castShadow = true;
+        this.kickerGroup.add(this.kickerLeftLeg);
+
+        this.kickerRightLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.07, 0.65), skinMat);
+        this.kickerRightLeg.position.set(0.14, 0.45, 0);
+        this.kickerRightLeg.castShadow = true;
+        this.kickerGroup.add(this.kickerRightLeg);
+
+        // Boots
+        const bootLeft = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.22), bootMat);
+        bootLeft.position.set(-0.14, 0.06, 0.04);
+        this.kickerGroup.add(bootLeft);
+
+        const bootRight = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.22), bootMat);
+        bootRight.position.set(0.14, 0.06, 0.04);
+        this.kickerGroup.add(bootRight);
+
+        this.kickerDefaultPos = new THREE.Vector3(0.5, 0, 12.1);
+        this.kickerGroup.position.copy(this.kickerDefaultPos);
+        this.scene.add(this.kickerGroup);
+
+        // Goalkeeper Mesh
+        this.keeperGroup = new THREE.Group();
+        const keeperKitMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.4 }); // Neon Yellow
+        const gloveMat = new THREE.MeshStandardMaterial({ color: 0x1e293b });
+
+        const keeperTorso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.75, 0.3), keeperKitMat);
+        keeperTorso.position.y = 1.15;
+        keeperTorso.castShadow = true;
+        this.keeperGroup.add(keeperTorso);
+
+        const keeperHead = new THREE.Mesh(new THREE.SphereGeometry(0.19, 16, 16), skinMat);
+        keeperHead.position.y = 1.68;
+        this.keeperGroup.add(keeperHead);
+
+        // Keeper Arms with Gloves
+        this.keeperLeftArm = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.6), keeperKitMat);
+        this.keeperLeftArm.position.set(-0.38, 1.2, 0);
+        this.keeperLeftArm.rotation.z = Math.PI / 6;
+        this.keeperGroup.add(this.keeperLeftArm);
+
+        this.keeperRightArm = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.6), keeperKitMat);
+        this.keeperRightArm.position.set(0.38, 1.2, 0);
+        this.keeperRightArm.rotation.z = -Math.PI / 6;
+        this.keeperGroup.add(this.keeperRightArm);
+
+        // Gloves
+        const leftGlove = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 12), gloveMat);
+        leftGlove.position.set(-0.52, 0.95, 0.05);
+        this.keeperGroup.add(leftGlove);
+
+        const rightGlove = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 12), gloveMat);
+        rightGlove.position.set(0.52, 0.95, 0.05);
+        this.keeperGroup.add(rightGlove);
+
+        this.keeperDefaultPos = new THREE.Vector3(0, 0, 0.1);
+        this.keeperGroup.position.copy(this.keeperDefaultPos);
+        this.scene.add(this.keeperGroup);
+      }
+
+      setupPhysics() {
+        this.ballVel = new THREE.Vector3(0, 0, 0);
+        this.ballSpin = new THREE.Vector3(0, 0, 0);
+        this.gravity = -9.8;
+      }
+
+      setupControls() {
+        this.touchStart = null;
+        this.aimCanvas = document.getElementById('aim-canvas');
+        this.aimCtx = this.aimCanvas.getContext('2d');
+        this.resizeAimCanvas();
+
+        const onPointerDown = (e) => {
+          if (this.gameState !== 'IDLE') return;
+          soundEngine.init();
+          
+          const x = e.touches ? e.touches[0].clientX : e.clientX;
+          const y = e.touches ? e.touches[0].clientY : e.clientY;
+          this.touchStart = { x, y, time: performance.now() };
+          this.gameState = 'AIMING';
+        };
+
+        const onPointerMove = (e) => {
+          if (this.gameState !== 'AIMING' || !this.touchStart) return;
+          const x = e.touches ? e.touches[0].clientX : e.clientX;
+          const y = e.touches ? e.touches[0].clientY : e.clientY;
+
+          this.drawAimLine(this.touchStart.x, this.touchStart.y, x, y);
+        };
+
+        const onPointerUp = (e) => {
+          if (this.gameState !== 'AIMING' || !this.touchStart) return;
+          const endX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
+          const endY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+          const duration = (performance.now() - this.touchStart.time) / 1000;
+
+          this.clearAimLine();
+
+          const dx = endX - this.touchStart.x;
+          const dy = this.touchStart.y - endY; // Upward swipe is positive
+
+          if (dy > 30 && duration < 1.2) {
+            this.shootBall(dx, dy, duration);
+          } else {
+            this.gameState = 'IDLE';
+          }
+          this.touchStart = null;
+        };
+
+        window.addEventListener('mousedown', onPointerDown);
+        window.addEventListener('mousemove', onPointerMove);
+        window.addEventListener('mouseup', onPointerUp);
+
+        window.addEventListener('touchstart', onPointerDown, { passive: true });
+        window.addEventListener('touchmove', onPointerMove, { passive: true });
+        window.addEventListener('touchend', onPointerUp, { passive: true });
+      }
+
+      resizeAimCanvas() {
+        this.aimCanvas.width = window.innerWidth;
+        this.aimCanvas.height = window.innerHeight;
+      }
+
+      drawAimLine(x1, y1, x2, y2) {
+        this.aimCtx.clearRect(0, 0, this.aimCanvas.width, this.aimCanvas.height);
+        
+        const gradient = this.aimCtx.createLinearGradient(x1, y1, x2, y2);
+        gradient.addColorStop(0, 'rgba(251, 191, 36, 0.2)');
+        gradient.addColorStop(1, 'rgba(251, 191, 36, 0.9)');
+
+        this.aimCtx.beginPath();
+        this.aimCtx.moveTo(x1, y1);
+        this.aimCtx.lineTo(x2, y2);
+        this.aimCtx.strokeStyle = gradient;
+        this.aimCtx.lineWidth = 6;
+        this.aimCtx.lineCap = 'round';
+        this.aimCtx.stroke();
+
+        // Target arrow head
+        const angle = Math.atan2(y2 - y1, x2 - x1);
+        this.aimCtx.beginPath();
+        this.aimCtx.moveTo(x2, y2);
+        this.aimCtx.lineTo(x2 - 16 * Math.cos(angle - Math.PI / 6), y2 - 16 * Math.sin(angle - Math.PI / 6));
+        this.aimCtx.lineTo(x2 - 16 * Math.cos(angle + Math.PI / 6), y2 - 16 * Math.sin(angle + Math.PI / 6));
+        this.aimCtx.fillStyle = '#fbbf24';
+        this.aimCtx.fill();
+      }
+
+      clearAimLine() {
+        this.aimCtx.clearRect(0, 0, this.aimCanvas.width, this.aimCanvas.height);
+      }
+
+      shootBall(dx, dy, duration) {
+        this.gameState = 'KICKED';
+        document.getElementById('swipe-guide').style.opacity = '0';
+        
+        soundEngine.playKick();
+
+        this.shots++;
+        document.getElementById('score-shots').innerText = this.shots;
+
+        // Calculate shot velocity
+        const speedPower = Math.min(Math.max(dy / (duration * 280), 12), 24);
+        const horizAngle = (dx / window.innerWidth) * 12;
+
+        this.ballVel.set(horizAngle, Math.min(speedPower * 0.45, 9.5), -speedPower);
+        this.ballSpin.set((Math.random() - 0.5) * 5, -horizAngle * 0.6, 0);
+
+        // Kicker animation
+        this.kickerLegAnim = 0;
+
+        // Trigger Goalkeeper AI Dive
+        this.triggerKeeperDive(horizAngle, speedPower);
+      }
+
+      triggerKeeperDive(shotX, shotSpeed) {
+        // Keeper selects dive direction (biased toward ball trajectory with slight randomness)
+        const rand = Math.random();
+        let targetX = 0;
+        let targetY = 0.9;
+
+        if (rand < 0.35) {
+          // Dive Left
+          targetX = -2.8;
+          targetY = Math.random() > 0.5 ? 1.8 : 0.4;
+        } else if (rand < 0.70) {
+          // Dive Right
+          targetX = 2.8;
+          targetY = Math.random() > 0.5 ? 1.8 : 0.4;
+        } else {
+          // Stay Center or Jump High
+          targetX = (Math.random() - 0.5) * 1.5;
+          targetY = Math.random() > 0.5 ? 2.0 : 0.9;
+        }
+
+        this.keeperTargetPos = new THREE.Vector3(targetX, targetY, 0.1);
+        this.keeperDiving = true;
+      }
+
+      resetPositions() {
+        this.gameState = 'IDLE';
+        this.ballPos.set(0, 0.22, 11.0);
+        this.ball.position.copy(this.ballPos);
+        this.ball.rotation.set(0, 0, 0);
+        this.ballVel.set(0, 0, 0);
+        this.ballSpin.set(0, 0, 0);
+
+        this.kickerGroup.position.copy(this.kickerDefaultPos);
+        this.kickerRightLeg.rotation.x = 0;
+
+        this.keeperGroup.position.copy(this.keeperDefaultPos);
+        this.keeperGroup.rotation.z = 0;
+        this.keeperDiving = false;
+
+        this.camera.position.copy(this.defaultCamPos);
+        this.camera.lookAt(this.defaultCamTarget);
+
+        document.getElementById('swipe-guide').style.opacity = '1';
+        this.confetti.stop();
+      }
+
+      updatePhysics(dt) {
+        if (this.gameState !== 'KICKED') return;
+
+        // Apply Magnus spin effect (curve)
+        this.ballVel.x += this.ballSpin.y * dt * 2.0;
+        
+        // Gravity
+        this.ballVel.y += this.gravity * dt;
+
+        // Translate ball position
+        this.ballPos.x += this.ballVel.x * dt;
+        this.ballPos.y += this.ballVel.y * dt;
+        this.ballPos.z += this.ballVel.z * dt;
+
+        this.ball.position.copy(this.ballPos);
+        this.ball.rotateX(this.ballVel.z * dt * 3);
+        this.ball.rotateY(this.ballVel.x * dt * 3);
+
+        // Update ball shadow
+        this.ballShadow.position.set(this.ballPos.x, 0.02, this.ballPos.z);
+        const shadowScale = Math.max(0.1, 1 - (this.ballPos.y / 6));
+        this.ballShadow.scale.set(shadowScale, shadowScale, shadowScale);
+
+        // Dynamic Camera Follow
+        this.camera.position.x = THREE.MathUtils.lerp(this.camera.position.x, this.ballPos.x * 0.3, 0.05);
+        this.camera.position.y = THREE.MathUtils.lerp(this.camera.position.y, 1.8 + this.ballPos.y * 0.2, 0.05);
+        this.camera.lookAt(this.ballPos.x * 0.5, 1.2, this.ballPos.z * 0.5);
+
+        // Ground bounce
+        if (this.ballPos.y <= 0.22) {
+          this.ballPos.y = 0.22;
+          this.ballVel.y = -this.ballVel.y * 0.55; // dampening
+          this.ballVel.x *= 0.8;
+          this.ballVel.z *= 0.8;
+        }
+
+        // --- Collision Checks ---
+        const goalWidth = 7.32;
+        const goalHeight = 2.44;
+
+        // 1. Keeper Save Check
+        const distToKeeper = this.ballPos.distanceTo(this.keeperGroup.position);
+        if (distToKeeper < 1.15 && this.ballPos.z > -0.5 && this.ballPos.z < 1.5) {
+          this.triggerResult('SAVED');
+          return;
+        }
+
+        // 2. Post / Crossbar Hit Check
+        if (Math.abs(this.ballPos.z) < 0.4) {
+          // Left or Right Post
+          if (Math.abs(Math.abs(this.ballPos.x) - goalWidth / 2) < 0.25 && this.ballPos.y <= goalHeight) {
+            soundEngine.playPostHit();
+            this.ballVel.z = -this.ballVel.z * 0.6;
+            this.ballVel.x = -this.ballVel.x * 0.6;
+            this.triggerResult('POST');
+            return;
+          }
+          // Crossbar
+          if (Math.abs(this.ballPos.x) < goalWidth / 2 && Math.abs(this.ballPos.y - goalHeight) < 0.25) {
+            soundEngine.playPostHit();
+            this.ballVel.z = -this.ballVel.z * 0.6;
+            this.ballVel.y = -this.ballVel.y * 0.6;
+            this.triggerResult('POST');
+            return;
+          }
+        }
+
+        // 3. Goal Scored Check (Ball behind goal line, inside posts and under crossbar)
+        if (this.ballPos.z <= 0 && this.ballPos.z > -2.0) {
+          if (Math.abs(this.ballPos.x) < (goalWidth / 2 - 0.1) && this.ballPos.y > 0.1 && this.ballPos.y < (goalHeight - 0.1)) {
+            this.triggerResult('GOAL');
+            return;
+          }
+        }
+
+        // 4. Missed Wide / Over / Behind Net
+        if (this.ballPos.z < -2.5 || Math.abs(this.ballPos.x) > 8 || this.ballPos.y > 6) {
+          this.triggerResult('MISSED');
+        }
+      }
+
+      triggerResult(type) {
+        if (this.gameState === 'RESULT') return;
+        this.gameState = 'RESULT';
+
+        setTimeout(() => {
+          if (type === 'GOAL') {
+            this.goals++;
+            document.getElementById('score-goals').innerText = this.goals;
+            
+            soundEngine.playGoalCheer();
+            soundEngine.playWhistle();
+            this.confetti.spawn();
+
+            document.getElementById('modal-success').classList.remove('modal-hidden');
+          } else {
+            soundEngine.playDisappointment();
+
+            const failTitle = document.getElementById('fail-title');
+            if (type === 'SAVED') {
+              failTitle.innerText = 'SAVED!';
+            } else if (type === 'POST') {
+              failTitle.innerText = 'HIT THE POST!';
+            } else {
+              failTitle.innerText = 'MISSED!';
+            }
+
+            document.getElementById('modal-fail').classList.remove('modal-hidden');
+          }
+        }, 600);
+      }
+
+      animate(time) {
+        requestAnimationFrame((t) => this.animate(t));
+
+        const dt = 0.016; // fixed timestep
+
+        // Update Physics
+        this.updatePhysics(dt);
+
+        // Kicker animation on kick
+        if (this.gameState === 'KICKED' && this.kickerLegAnim !== undefined && this.kickerLegAnim < Math.PI / 2) {
+          this.kickerLegAnim += dt * 12;
+          this.kickerRightLeg.rotation.x = -Math.sin(this.kickerLegAnim) * 0.8;
+        }
+
+        // Goalkeeper dive animation
+        if (this.keeperDiving && this.keeperTargetPos) {
+          this.keeperGroup.position.lerp(this.keeperTargetPos, 0.12);
+          const diveAngle = (this.keeperTargetPos.x < 0 ? 1 : -1) * Math.PI / 4;
+          this.keeperGroup.rotation.z = THREE.MathUtils.lerp(this.keeperGroup.rotation.z, diveAngle, 0.12);
+        }
+
+        this.renderer.render(this.scene, this.camera);
+      }
+
+      onResize() {
+        this.camera.aspect = window.innerWidth / window.innerHeight;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.resizeAimCanvas();
+      }
+    }
+
+    // --- UI Event Listeners & Game Bootstrap ---
+    window.addEventListener('DOMContentLoaded', () => {
+      const game = new PenaltyGame();
+
+      // Mute Toggle
+      const btnMute = document.getElementById('btn-mute');
+      const iconSoundOn = document.getElementById('icon-sound-on');
+      const iconSoundOff = document.getElementById('icon-sound-off');
+
+      btnMute.addEventListener('click', () => {
+        const isMuted = soundEngine.toggleMute();
+        iconSoundOn.style.display = isMuted ? 'none' : 'block';
+        iconSoundOff.style.display = isMuted ? 'block' : 'none';
+      });
+
+      // Start Game Button
+      document.getElementById('btn-start').addEventListener('click', () => {
+        soundEngine.init();
+        soundEngine.startCrowdAmbient();
+        soundEngine.playWhistle();
+
+        document.getElementById('modal-start').classList.add('modal-hidden');
+      });
+
+      // Replay Button (Goal)
+      document.getElementById('btn-replay').addEventListener('click', () => {
+        document.getElementById('modal-success').classList.add('modal-hidden');
+        game.resetPositions();
+        soundEngine.playWhistle();
+      });
+
+      // Retry Button (Fail)
+      document.getElementById('btn-retry').addEventListener('click', () => {
+        document.getElementById('modal-fail').classList.add('modal-hidden');
+        game.resetPositions();
+        soundEngine.playWhistle();
+      });
+    });
+  </script>
+</body>
+</html>
