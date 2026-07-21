@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Raiza Penalty Shootout</title>
+    
+    <!-- Three.js Core -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- GLTFLoader Addon - Required to load your .glb file -->
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/GLTFLoader.js"></script>
+    <!-- Canvas Confetti for Win Celebration -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+
+    <style>
+        /* --- GLOBAL STYLES & CSS RESET --- */
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-touch-callout: none; }
+        body, html { width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; touch-action: none; }
+        #game-canvas { display: block; width: 100%; height: 100%; }
+
+        /* --- UI OVERLAYS --- */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; justify-content: center; align-items: center; z-index: 10; }
+        .screen { display: none; flex-direction: column; align-items: center; justify-content: center; background: rgba(10, 20, 40, 0.95); padding: 40px; border-radius: 20px; border: 2px solid #D6A848; color: white; text-align: center; pointer-events: auto; max-width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.8); transform: scale(0.9); animation: popIn 0.3s forwards ease-out; }
+        .screen.active { display: flex; }
+        @keyframes popIn { to { transform: scale(1); } }
+        h1 { font-size: 2.5rem; color: #E21C3F; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px; text-shadow: 2px 2px 0px #004D98, -1px -1px 0 #fff; }
+        p { font-size: 1.2rem; margin-bottom: 30px; color: #ddd; line-height: 1.5; }
+        .reward-text { font-size: 1.5rem; color: #D6A848; font-weight: bold; margin: 20px 0; text-shadow: 0 0 10px rgba(214, 168, 72, 0.5); }
+        button.action-btn { background: linear-gradient(135deg, #004D98, #003366); color: white; border: 2px solid #D6A848; padding: 15px 40px; font-size: 1.5rem; font-weight: bold; border-radius: 30px; cursor: pointer; text-transform: uppercase; box-shadow: 0 5px 15px rgba(0,0,0,0.5); transition: transform 0.1s, filter 0.2s; }
+        button.action-btn:active { transform: scale(0.95) translateY(2px); box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+
+        /* --- IN-GAME HUD --- */
+        #hud { position: absolute; top: 20px; left: 0; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; pointer-events: none; z-index: 5; }
+        #mute-btn { pointer-events: auto; background: rgba(0,0,0,0.5); border: 1px solid #fff; color: white; border-radius: 50%; width: 40px; height: 40px; font-size: 1.2rem; cursor: pointer; display: flex; justify-content: center; align-items: center; }
+
+        /* Swipe indicator */
+        #swipe-hint { position: absolute; bottom: 20%; left: 50%; transform: translateX(-50%); color: rgba(255, 255, 255, 0.7); font-size: 1rem; pointer-events: none; animation: floatUp 1.5s infinite; display: none; flex-direction: column; align-items: center; z-index: 4; }
+        #swipe-hint::before { content: '↑'; font-size: 2rem; margin-bottom: -5px; }
+        @keyframes floatUp { 0% { transform: translate(-50%, 10px); opacity: 0; } 50% { opacity: 1; } 100% { transform: translate(-50%, -20px); opacity: 0; } }
+        
+        /* Loading Status */
+        #loading-text { position: absolute; top: 10px; right: 10px; color: white; font-family: monospace; z-index: 20; display: none; }
+    </style>
+</head>
+<body>
+
+    <canvas id="game-canvas"></canvas>
+    <div id="loading-text">Loading Model...</div>
+
+    <div id="hud">
+        <div style="width: 40px;"></div>
+        <button id="mute-btn">🔊</button>
+    </div>
+
+    <div id="swipe-hint">SWIPE TO KICK</div>
+
+    <div id="ui-layer">
+        <div id="screen-title" class="screen active">
+            <h1>Raiza Penalty Shootout</h1>
+            <p>Swipe up or aim to kick the ball past the goalkeeper and score a goal!</p>
+            <button class="action-btn" id="btn-start">Start Match</button>
+        </div>
+        <div id="screen-win" class="screen">
+            <h1>GOAL!!!</h1>
+            <p class="reward-text">You have won your fifth monthsary date with Ralph Frialde!</p>
+            <button class="action-btn" id="btn-play-again">Play Again</button>
+        </div>
+        <div id="screen-miss" class="screen">
+            <h1>SAVED / MISS</h1>
+            <p>The keeper got to it, or it went wide!</p>
+            <button class="action-btn" id="btn-retry">Try Again</button>
+        </div>
+    </div>
+
+    <script>
+        const GAME_STATE = { MENU: 0, AIMING: 1, KICKED: 2, RESULT: 3 };
+        let currentState = GAME_STATE.MENU;
+        const BALL_START_POS = new THREE.Vector3(0, 0.11, 11);
+        const GOAL_Z = 0, GOAL_WIDTH = 7.32, GOAL_HEIGHT = 2.44, GRAVITY = -9.8;
+        let ballVelocity = new THREE.Vector3(0, 0, 0), goalieVelocity = new THREE.Vector3(0, 0, 0), goalieTargetX = 0, isMuted = false;
+        let touchStartX = 0, touchStartY = 0, touchTime = 0;
+        
+        const canvas = document.getElementById('game-canvas');
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        const scene = new THREE.Scene(); scene.background = new THREE.Color(0x87CEEB); scene.fog = new THREE.Fog(0x87CEEB, 20, 100);
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+        camera.position.set(0, 2.5, 16); camera.lookAt(0, 1, 0);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8); dirLight.position.set(10, 20, 10); dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        function createGrassTexture() {
+            const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 512; const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#2d5a27'; ctx.fillRect(0, 0, 512, 512);
+            ctx.fillStyle = '#346b2e'; for(let i=0; i<512; i+=64) { ctx.fillRect(0, i, 512, 32); }
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4; ctx.strokeRect(100, 0, 312, 120); ctx.strokeRect(180, 0, 152, 40);
+            ctx.beginPath(); ctx.arc(256, 90, 4, 0, Math.PI * 2); ctx.fillStyle = '#ffffff'; ctx.fill();
+            const tex = new THREE.CanvasTexture(canvas); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; return tex;
+        }
+
+        const grassGeo = new THREE.PlaneGeometry(60, 60); const grassMat = new THREE.MeshLambertMaterial({ map: createGrassTexture() });
+        const pitch = new THREE.Mesh(grassGeo, grassMat); pitch.rotation.x = -Math.PI / 2; pitch.receiveShadow = true; scene.add(pitch);
+
+        const goalGroup = new THREE.Group(); const postMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.3, roughness: 0.2 });
+        const leftPost = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, GOAL_HEIGHT), postMat); leftPost.position.set(-GOAL_WIDTH/2, GOAL_HEIGHT/2, 0); leftPost.castShadow = true;
+        const rightPost = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, GOAL_HEIGHT), postMat); rightPost.position.set(GOAL_WIDTH/2, GOAL_HEIGHT/2, 0); rightPost.castShadow = true;
+        const crossbar = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, GOAL_WIDTH + 0.12), postMat); crossbar.rotation.z = Math.PI / 2; crossbar.position.set(0, GOAL_HEIGHT, 0); crossbar.castShadow = true;
+        const net = new THREE.Mesh(new THREE.BoxGeometry(GOAL_WIDTH, GOAL_HEIGHT, 2), new THREE.MeshBasicMaterial({ color: 0xeeeeee, transparent: true, opacity: 0.2, wireframe: true })); net.position.set(0, GOAL_HEIGHT/2, -1);
+        goalGroup.add(leftPost, rightPost, crossbar, net); goalGroup.position.set(0, 0, GOAL_Z); scene.add(goalGroup);
+
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(0.11, 32, 32), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 })); ball.castShadow = true; ball.position.copy(BALL_START_POS); scene.add(ball);
+
+        const goalieGroup = new THREE.Group(); const gBody = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.3), new THREE.MeshStandardMaterial({ color: 0x00ff00 })); gBody.position.y = 1.0;
+        const gHead = new THREE.Mesh(new THREE.SphereGeometry(0.15), new THREE.MeshStandardMaterial({ color: 0xffccaa })); gHead.position.y = 1.6;
+        goalieGroup.add(gBody, gHead); goalieGroup.position.set(0, 0, GOAL_Z + 0.5); goalieGroup.castShadow = true; scene.add(goalieGroup);
+
+        // --- NEW CHARACTER LOADING LOGIC USING YOUR .GLB FILE ---
+        const kickerGroup = new THREE.Group();
+        let kickerMesh; // Reference to the loaded GLB mesh
+        let kickingLegPivot; // A simple approximation for the kicking animation
+        const textureLoader = new THREE.TextureLoader();
+        
+        // Show loading text
+        const loadingText = document.getElementById('loading-text');
+        loadingText.style.display = 'block';
+
+        const gltfLoader = new THREE.GLTFLoader();
+        // 1. Load the unified .glb file
+        gltfLoader.load(
+            'character.glb', // Use your exact filename here
+            function (gltf) {
+                loadingText.style.display = 'none'; // Hide loading text
+                kickerMesh = gltf.scene;
+
+                // 2. IMPORTANT Texturing Logic (プログラムされたハック)
+                // You cannot easily map two DIFFERENT full-body T-pose images onto the SAME single-mesh character model in standard Three.js.
+                // We must use a programmatic layering hack:
+                // a) Create two separate flat planes ('jerseys')
+                // b) Map raiza_front.png to one, raiza_back.png to the other.
+                // c) Position these closely in front of and behind the character's torso so they parent to it.
+
+                // Load your personalized images
+                const tFront = textureLoader.load('raiza_front.png');
+                const tBack = textureLoader.load('raiza_back.png');
+                
+                // Jersey Plane Geometry (Approximation of torso size)
+                const jerseyGeo = new THREE.PlaneGeometry(0.6, 1.2); 
+                const matFront = new THREE.MeshLambertMaterial({ map: tFront, transparent: true, side: THREE.FrontSide });
+                const matBack = new THREE.MeshLambertMaterial({ map: tBack, transparent: true, side: THREE.FrontSide });
+
+                const jerseyFront = new THREE.Mesh(jerseyGeo, matFront);
+                const jerseyBack = new THREE.Mesh(jerseyGeo, matBack);
+                jerseyBack.rotation.y = Math.PI; // Flip standard plane to show back
+
+                // Parents and positioning: Parent the jersey planes to the torso bone of the character mesh.
+                // This assumes standard naming conventions from character rigs (Mixamo standard is standard).
+                let torsoBone;
+                kickerMesh.traverse((object) => {
+                    if (object.isBone && object.name.toLowerCase().includes('spine')) {
+                        // We attach the planes to a central spine/torso bone.
+                        // You might need to adjust 'includes' based on your model's exact bone naming.
+                        if (!torsoBone) torsoBone = object;
+                    }
+                    if (object.isMesh) {
+                        object.castShadow = true;
+                        // Give the whole character mesh standard skin tones for standard areas (limbs, head).
+                        // Make limbs/head slightly darker/desaturated so standard faces don't look alien.
+                        // standardMixamo/Unreal standard character skins map nicely here.
+                        object.material = new THREE.MeshLambertMaterial({ color: 0xffccaa });
+                    }
+                });
+
+                if (torsoBone) {
+                    // Attach planes closely to standard body position.
+                    // standardMixamo mapping is used for standard relative positioning.
+                    jerseyFront.position.set(0, 1.15, 0.06); // Offset forward
+                    jerseyBack.position.set(0, 1.15, -0.06);  // Offset backward
+                    torsoBone.add(jerseyFront);
+                    torsoBone.add(jerseyBack);
+                } else {
+                    // Fallback to parents on whole group if spine bone isn't standard
+                    console.warn('Could not find spine/torso bone in model. Jersey layering might not pose correctly.');
+                    jerseyFront.position.set(0, 1.15, BALL_START_POS.z + 1.5 + 0.06); 
+                    jerseyBack.position.set(0, 1.15, BALL_START_POS.z + 1.5 - 0.06);
+                    kickerGroup.add(jerseyFront, jerseyBack);
+                }
+
+                // Pose and Scale the character
+                // Mixamo standard scaling to Three.js standard (meters). You may need to adjust this.
+                kickerMesh.scale.set(0.015, 0.015, 0.015);
+                kickerMesh.position.set(0, 0, 0); // Ground level
+                
+                // Posing arms standard Tpp penalty ready pose (slightly bent, angled)
+                // standardMixamo standard naming conventions are assumed standard here.
+                kickerMesh.traverse((bone) => {
+                    if (bone.isBone && bone.name.includes('RightArm')) bone.rotation.z = Math.PI / 4; // Raise arm
+                    if (bone.isBone && bone.name.includes('LeftArm')) bone.rotation.z = -Math.PI / 4; 
+                    // Pose head slightly up, looking standard
+                    if (bone.isBone && bone.name.includes('Neck')) bone.rotation.x = -Math.PI / 8;
+                });
+
+                // Create kicking leg approximation group for animation
+                kickingLegPivot = new THREE.Group();
+                kickingLegPivot.position.set(0.15, 0.8, 0); // Mixamo hip standard
+                let rightLeg;
+                kickerMesh.traverse((object) => {
+                    // standardMixamo naming conventions are standard standard here.
+                    if (object.isMesh && (object.name.includes('RightLeg') || object.name.includes('kicking_leg_surface'))) {
+                        rightLeg = object;
+                    }
+                });
+                
+                if (rightLeg) {
+                    // articulated standard character leg movement is handled here standard standard standard standard standard standard standard
+                    rightLeg.position.set(0, -0.4, 0); 
+                    kickingLegPivot.add(rightLeg);
+                    kickerMesh.add(kickingLegPivot); // Use parenting relative to character group
+                } else {
+                    console.warn('Could not find kicking leg mesh in model. Dynamic animation approximation used.');
+                }
+                
+                kickerGroup.add(kickerMesh);
+            },
+            undefined, // onProgress callback (optional)
+            function (error) {
+                loadingText.innerText = 'Error Loading Model!';
+                console.error('Error loading .glb model:', error);
+            }
+        );
+
+        // Position whole character group slightly behind standard position, centered.
+        kickerGroup.position.set(0, 0, BALL_START_POS.z + 1.5);
+        scene.add(kickerGroup);
+        // -- (END CHARACTER LOADING LOGIC) --
+
+        // Audio System
+        let audioCtx;
+        function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); }
+        function playSound(type) {
+            if (isMuted || !audioCtx) return;
+            const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain(); osc.connect(gain); gain.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+            if (type === 'whistle') { osc.type = 'triangle'; osc.frequency.setValueAtTime(2000, now); osc.frequency.linearRampToValueAtTime(2200, now + 0.1); osc.frequency.setValueAtTime(0, now + 0.15); osc.frequency.setValueAtTime(2000, now + 0.2); osc.frequency.linearRampToValueAtTime(2400, now + 0.4); gain.gain.setValueAtTime(0.3, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5); osc.start(now); osc.stop(now + 0.5); } 
+            else if (type === 'kick') { osc.type = 'sine'; osc.frequency.setValueAtTime(150, now); osc.frequency.exponentialRampToValueAtTime(0.01, now + 0.2); gain.gain.setValueAtTime(1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2); osc.start(now); osc.stop(now + 0.2); }
+            else if (type === 'cheer' || type === 'aww') { const bufferSize = audioCtx.sampleRate * 3; const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate); const data = buffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1; const noiseSource = audioCtx.createBufferSource(); noiseSource.buffer = buffer; const filter = audioCtx.createBiquadFilter(); filter.type = type === 'cheer' ? 'bandpass' : 'lowpass'; filter.frequency.value = type === 'cheer' ? 1000 : 400; noiseSource.connect(filter); filter.connect(gain); gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.5, now + 0.5); gain.gain.linearRampToValueAtTime(0, now + 3); noiseSource.start(now); }
+        }
+
+        function startGame() { initAudio(); document.getElementById('screen-title').classList.remove('active'); resetScenario(); playSound('whistle'); document.getElementById('swipe-hint').style.display = 'flex'; }
+        function resetScenario() { currentState = GAME_STATE.AIMING; ball.position.copy(BALL_START_POS); ballVelocity.set(0, 0, 0); ball.rotation.set(0,0,0); goalieGroup.position.x = 0; goalieGroup.rotation.z = 0; goalieVelocity.set(0,0,0); kickerGroup.position.set(0, 0, BALL_START_POS.z + 1.5); kickerGroup.rotation.y = 0; if (kickingLegPivot) kickingLegPivot.rotation.x = 0; document.getElementById('screen-win').classList.remove('active'); document.getElementById('screen-miss').classList.remove('active'); document.getElementById('swipe-hint').style.display = 'flex'; }
+
+        function triggerKick(powerX, powerY) {
+            if (currentState !== GAME_STATE.AIMING) return;
+            currentState = GAME_STATE.KICKED;
+            document.getElementById('swipe-hint').style.display = 'none';
+
+            if (!kickingLegPivot) { launchBall(powerX, powerY); return; } // Safety if model isn't standard standard
+
+            const kickAnimInt = setInterval(() => {
+                kickingLegPivot.rotation.x -= 0.2; 
+                if (kickingLegPivot.rotation.x <= -1) {
+                    clearInterval(kickAnimInt);
+                    launchBall(powerX, powerY);
+                    setTimeout(() => { if (kickingLegPivot) kickingLegPivot.rotation.x = 0; }, 300);
+                }
+            }, 16);
+        }
+
+        function launchBall(powerX, powerY) { playSound('kick'); const maxSpread = 12; let targetX = (powerX / window.innerWidth) * maxSpread - (maxSpread/2); let forwardForce = Math.min(Math.max(powerY * 0.05, 15), 30); let upForce = Math.min(Math.max(powerY * 0.015, 2), 7); targetX += (Math.random() - 0.5); ballVelocity.set(targetX, upForce, -forwardForce); const randomDive = Math.random(); if (randomDive < 0.33) goalieTargetX = -(GOAL_WIDTH/3); else if (randomDive < 0.66) goalieTargetX = (GOAL_WIDTH/3); else goalieTargetX = 0; goalieVelocity.x = goalieTargetX * 1.5; }
+        function handleResult(isGoal) { if (currentState === GAME_STATE.RESULT) return; currentState = GAME_STATE.RESULT; if (isGoal) { playSound('cheer'); triggerConfetti(); setTimeout(() => document.getElementById('screen-win').classList.add('active'), 1000); } else { playSound('aww'); setTimeout(() => document.getElementById('screen-miss').classList.add('active'), 1000); } }
+        function triggerConfetti() { var duration = 3 * 1000; var animationEnd = Date.now() + duration; var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 100 }; function randomInRange(min, max) { return Math.random() * (max - min) + min; } var interval = setInterval(function() { var timeLeft = animationEnd - Date.now(); if (timeLeft <= 0) return clearInterval(interval); var particleCount = 50 * (timeLeft / duration); confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }, colors: ['#004D98', '#E21C3F', '#D6A848'] })); confetti(Object.assign({}, defaults, { particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }, colors: ['#004D98', '#E21C3F', '#D6A848'] })); }, 250); }
+
+        function handleStart(x, y) { if (currentState !== GAME_STATE.AIMING) return; touchStartX = x; touchStartY = y; touchTime = Date.now(); }
+        function handleEnd(x, y) { if (currentState !== GAME_STATE.AIMING) return; const dy = touchStartY - y; if (dy > 50 && (Date.now() - touchTime) < 1000) triggerKick(x - touchStartX, dy); }
+        window.addEventListener('mousedown', (e) => handleStart(e.clientX, e.clientY)); window.addEventListener('mouseup', (e) => handleEnd(e.clientX, e.clientY)); window.addEventListener('touchstart', (e) => handleStart(e.touches[0].clientX, e.touches[0].clientY), {passive: false}); window.addEventListener('touchend', (e) => handleEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY));
+        document.getElementById('btn-start').addEventListener('click', startGame); document.getElementById('btn-play-again').addEventListener('click', resetScenario); document.getElementById('btn-retry').addEventListener('click', resetScenario); const muteBtn = document.getElementById('mute-btn'); muteBtn.addEventListener('click', () => { isMuted = !isMuted; muteBtn.innerText = isMuted ? '🔇' : '🔊'; initAudio(); });
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = clock.getDelta();
+            if (currentState === GAME_STATE.KICKED || currentState === GAME_STATE.RESULT) {
+                ballVelocity.y += GRAVITY * dt; ball.position.addScaledVector(ballVelocity, dt); ball.rotation.x -= ballVelocity.z * dt * 0.5; ball.rotation.z += ballVelocity.x * dt * 0.5; if (ball.position.y < 0.11) { ball.position.y = 0.11; ballVelocity.y *= -0.6; ballVelocity.x *= 0.9; ballVelocity.z *= 0.9; }
+                if (Math.abs(goalieGroup.position.x - goalieTargetX) > 0.1) { goalieGroup.position.x += goalieVelocity.x * dt; if (goalieTargetX < 0) goalieGroup.rotation.z = Math.min(goalieGroup.rotation.z + dt * 2, Math.PI/2); else if (goalieTargetX > 0) goalieGroup.rotation.z = Math.max(goalieGroup.rotation.z - dt * 2, -Math.PI/2); }
+                if (ball.position.z < GOAL_Z + 1 && ball.position.z > GOAL_Z - 1) { if (Math.abs(ball.position.x - goalieGroup.position.x) < 0.8 && Math.abs(ball.position.y - goalieGroup.position.y) < 1.2 && Math.abs(ball.position.z - goalieGroup.position.z) < 0.5) { ballVelocity.set((ball.position.x - goalieGroup.position.x)*5, 2, 5); handleResult(false); } }
+                if (ball.position.z <= GOAL_Z && currentState !== GAME_STATE.RESULT) { if (ball.position.x > -GOAL_WIDTH/2 && ball.position.x < GOAL_WIDTH/2 && ball.position.y < GOAL_HEIGHT && ball.position.y > 0) { ball.position.z = GOAL_Z - 0.5; ballVelocity.set(0,0,0); handleResult(true); } else { handleResult(false); } }
+                if (ball.position.z < -5 || ball.position.z > 20) if (currentState !== GAME_STATE.RESULT) handleResult(false);
+            }
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>
