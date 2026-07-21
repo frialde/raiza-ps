@@ -211,6 +211,106 @@
       pointer-events: none;
     }
 
+    /* Replay Overlay TV Broadcast Badge */
+    .replay-badge-overlay {
+      position: absolute;
+      top: 72px;
+      left: 50%;
+      transform: translateX(-50%) scale(0.9);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1.5px solid #ef4444;
+      color: #ffffff;
+      padding: 8px 18px;
+      border-radius: 24px;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 15px rgba(239, 68, 68, 0.4);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      z-index: 50;
+    }
+
+    .replay-badge-overlay.active {
+      opacity: 1;
+      transform: translateX(-50%) scale(1);
+    }
+
+    /* Cinematic Replay Letterbox & Motion Blur Shader Overlay */
+    .cinematic-replay-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 6;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      overflow: hidden;
+    }
+
+    .cinematic-replay-overlay.active {
+      opacity: 1;
+    }
+
+    .letterbox-bar-top, .letterbox-bar-bottom {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      height: 9vh;
+      background: #000000;
+      z-index: 7;
+      transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.95);
+    }
+
+    .letterbox-bar-top {
+      top: 0;
+      transform: translateY(-100%);
+    }
+
+    .letterbox-bar-bottom {
+      bottom: 0;
+      transform: translateY(100%);
+    }
+
+    .cinematic-replay-overlay.active .letterbox-bar-top,
+    .cinematic-replay-overlay.active .letterbox-bar-bottom {
+      transform: translateY(0);
+    }
+
+    #motion-blur-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 6;
+    }
+
+    .rec-dot {
+      width: 10px;
+      height: 10px;
+      background-color: #ef4444;
+      border-radius: 50%;
+      box-shadow: 0 0 10px #ef4444;
+      animation: recPulse 0.8s infinite alternate ease-in-out;
+    }
+
+    @keyframes recPulse {
+      0% { opacity: 0.2; transform: scale(0.8); }
+      100% { opacity: 1; transform: scale(1.2); }
+    }
+
     /* Start Card & General Modals */
     .modal-card {
       background: #ffffff;
@@ -712,6 +812,19 @@
     </div>
   </div>
 
+  <!-- Replay Badge Overlay -->
+  <div id="replay-badge" class="replay-badge-overlay">
+    <span class="rec-dot"></span>
+    <span>🎬 SLOW-MOTION REPLAY (0.35x)</span>
+  </div>
+
+  <!-- Cinematic Replay Overlay with Motion Blur & Letterbox -->
+  <div id="cinematic-replay-overlay" class="cinematic-replay-overlay">
+    <div class="letterbox-bar-top"></div>
+    <div class="letterbox-bar-bottom"></div>
+    <canvas id="motion-blur-canvas"></canvas>
+  </div>
+
   <!-- Swipe Instruction Guide -->
   <div id="swipe-guide">
     <div class="swipe-hand">👆</div>
@@ -735,7 +848,7 @@
     </div>
 
     <div class="modal-card">
-      <h1 class="game-title">RAIZA <span class="title-accent">PENALTY</span> SHOOTOUT</h1>
+      <h1 class="game-title">PENALTY <span class="title-accent">SHOOTOUT</span></h1>
       
       <div class="player-card-preview">
         <div class="avatar-circle">⚽</div>
@@ -759,6 +872,10 @@
       <div class="goal-header-banner">🎉 GOAL SCORED! 🎉</div>
       <div id="goal-count-text" style="font-size: 26px; font-weight: 900; color: #fde047; text-transform: uppercase;">1 / 5 GOALS</div>
       <p id="goal-remaining-text" class="victory-subtext">4 MORE GOALS TO BEAT THE GAME!</p>
+      
+      <button id="btn-watch-replay" class="btn-primary" style="background: #8b5cf6; color: #ffffff; box-shadow: 0 8px 0 #6d28d9; margin-bottom: 4px;">
+        🎬 WATCH REPLAY
+      </button>
       <button id="btn-next-kick" class="btn-primary btn-gold">NEXT SHOT ⚽</button>
     </div>
   </div>
@@ -792,6 +909,10 @@
           <span class="stat-lbl">PITCH WIND</span>
         </div>
       </div>
+
+      <button id="btn-watch-victory-replay" class="btn-primary" style="background: #8b5cf6; color: #ffffff; box-shadow: 0 8px 0 #6d28d9; margin-bottom: 8px;">
+        🎬 WATCH REPLAY
+      </button>
 
       <button id="btn-victory-stats" class="btn-primary" style="background: #38bdf8; color: #0f172a; box-shadow: 0 10px 0 #0284c7; margin-bottom: 8px;">
         VIEW SHOT MAP 🎯
@@ -1461,32 +1582,94 @@
 
     function createGrassTexture() {
       const canvas = document.createElement('canvas');
-      canvas.width = 512;
-      canvas.height = 512;
+      canvas.width = 1024;
+      canvas.height = 1024;
       const ctx = canvas.getContext('2d');
 
-      // Striped lawn
-      ctx.fillStyle = '#225424';
-      ctx.fillRect(0, 0, 512, 512);
+      // Multi-toned realistic stadium lawn stripes
+      const stripeWidth = 128;
+      const c1 = '#1c4a24';
+      const c2 = '#255e2d';
 
-      ctx.fillStyle = '#1a431c';
-      const stripeWidth = 64;
-      for (let y = 0; y < 512; y += stripeWidth * 2) {
-        ctx.fillRect(0, y, 512, stripeWidth);
+      for (let y = 0; y < 1024; y += stripeWidth) {
+        const isEven = Math.floor(y / stripeWidth) % 2 === 0;
+        ctx.fillStyle = isEven ? c1 : c2;
+        ctx.fillRect(0, y, 1024, stripeWidth);
+
+        // Mower roller shine gradient across each stripe
+        const grad = ctx.createLinearGradient(0, y, 0, y + stripeWidth);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 0.07)');
+        grad.addColorStop(0.5, 'rgba(0, 0, 0, 0.05)');
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0.07)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, y, 1024, stripeWidth);
       }
 
-      // Add noise grass flecks
-      ctx.fillStyle = '#2d6a30';
-      for (let i = 0; i < 2000; i++) {
-        const x = Math.random() * 512;
-        const y = Math.random() * 512;
-        ctx.fillRect(x, y, 2, 4);
+      // Organic grass blade directional strokes & color noise flecks
+      const colors = ['#2e7236', '#1a4320', '#3b8944', '#15361a', '#449e4d'];
+      for (let i = 0; i < 45000; i++) {
+        const x = Math.random() * 1024;
+        const y = Math.random() * 1024;
+        const len = 3 + Math.random() * 7;
+        const angle = (Math.random() - 0.5) * 0.5;
+
+        ctx.strokeStyle = colors[Math.floor(Math.random() * colors.length)];
+        ctx.globalAlpha = 0.15 + Math.random() * 0.35;
+        ctx.lineWidth = 1.0 + Math.random() * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.sin(angle) * len, y - Math.cos(angle) * len);
+        ctx.stroke();
       }
+      ctx.globalAlpha = 1.0;
 
       const texture = new THREE.CanvasTexture(canvas);
       texture.wrapS = THREE.RepeatWrapping;
       texture.wrapT = THREE.RepeatWrapping;
-      texture.repeat.set(12, 12);
+      texture.repeat.set(45, 45);
+      return texture;
+    }
+
+    function createGrassBumpTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      // Mid-gray height base
+      ctx.fillStyle = '#808080';
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Fine grain noise pixel heightmap for tactile grass blade bumpiness
+      const imgData = ctx.getImageData(0, 0, 512, 512);
+      const data = imgData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const val = Math.min(255, Math.max(0, 128 + (Math.random() - 0.5) * 110));
+        data[i] = val;
+        data[i + 1] = val;
+        data[i + 2] = val;
+      }
+      ctx.putImageData(imgData, 0, 0);
+
+      // Add directional blade highlights for bump relief
+      for (let i = 0; i < 20000; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const isBright = Math.random() > 0.45;
+        ctx.strokeStyle = isBright ? '#ffffff' : '#000000';
+        ctx.globalAlpha = 0.30;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + (Math.random() - 0.5) * 2, y - 3 - Math.random() * 4);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1.0;
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(45, 45);
       return texture;
     }
 
@@ -1559,12 +1742,16 @@
         this.windDirection = 'CALM';
 
         this.gameState = 'IDLE'; // IDLE, AIMING, KICKED, RESULT
+        this.isReplay = false;
+        this.lastGoalShot = null;
+        this.cameraShakeIntensity = 0;
         
         this.setupScene();
         this.setupStadium();
         this.setupEntities();
         this.setupPhysics();
         this.setupControls();
+        this.initMotionBlurOverlay();
 
         this.updateWind();
         this.updateAnalyticsUI();
@@ -1573,6 +1760,120 @@
 
         window.addEventListener('resize', () => this.onResize());
         this.animate(0);
+      }
+
+      initMotionBlurOverlay() {
+        this.mbCanvas = document.getElementById('motion-blur-canvas');
+        if (this.mbCanvas) {
+          this.mbCtx = this.mbCanvas.getContext('2d');
+          this.resizeMotionBlurCanvas();
+        }
+      }
+
+      resizeMotionBlurCanvas() {
+        if (this.mbCanvas) {
+          this.mbCanvas.width = window.innerWidth;
+          this.mbCanvas.height = window.innerHeight;
+        }
+      }
+
+      triggerCameraShake(intensity = 0.35) {
+        this.cameraShakeIntensity = Math.max(this.cameraShakeIntensity, intensity);
+      }
+
+      renderMotionBlurOverlay() {
+        if (!this.mbCanvas || !this.mbCtx) return;
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+
+        if (!this.isReplay) {
+          this.mbCtx.clearRect(0, 0, w, h);
+          return;
+        }
+
+        this.mbCtx.clearRect(0, 0, w, h);
+
+        const speed = this.ballVel ? this.ballVel.length() : 0;
+        
+        // 1. Calculate 2D Screen Projection of Ball Position & Motion Vector
+        const ballPosScreen = this.ballPos.clone().project(this.camera);
+        const px = (ballPosScreen.x * 0.5 + 0.5) * w;
+        const py = (-ballPosScreen.y * 0.5 + 0.5) * h;
+
+        // Project past position for directional speed vector on screen
+        const pastPos = this.ballPos.clone().sub(this.ballVel.clone().multiplyScalar(0.08));
+        const pastPosScreen = pastPos.project(this.camera);
+        const pastPx = (pastPosScreen.x * 0.5 + 0.5) * w;
+        const pastPy = (-pastPosScreen.y * 0.5 + 0.5) * h;
+
+        const dx = px - pastPx;
+        const dy = py - pastPy;
+        const streakLen = Math.hypot(dx, dy);
+
+        // 2. Dynamic Motion Streak Trails during flight
+        if (this.gameState === 'KICKED' || this.gameState === 'RESULT') {
+          if (streakLen > 2) {
+            const grad = this.mbCtx.createLinearGradient(px, py, pastPx, pastPy);
+            grad.addColorStop(0, 'rgba(255, 255, 255, 0.70)');
+            grad.addColorStop(0.3, 'rgba(251, 207, 232, 0.50)');
+            grad.addColorStop(1, 'rgba(147, 197, 253, 0)');
+
+            this.mbCtx.strokeStyle = grad;
+            this.mbCtx.lineWidth = Math.min(32, 10 + speed * 0.65);
+            this.mbCtx.lineCap = 'round';
+            this.mbCtx.beginPath();
+            this.mbCtx.moveTo(px, py);
+            this.mbCtx.lineTo(pastPx - dx * 1.8, pastPy - dy * 1.8);
+            this.mbCtx.stroke();
+
+            // Action line highlights flanking the velocity vector
+            const perpX = -dy / streakLen;
+            const perpY = dx / streakLen;
+            for (let offset of [-14, -7, 7, 14]) {
+              this.mbCtx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+              this.mbCtx.lineWidth = 2.0;
+              this.mbCtx.beginPath();
+              this.mbCtx.moveTo(px + perpX * offset, py + perpY * offset);
+              this.mbCtx.lineTo(pastPx + perpX * offset * 0.5, pastPy + perpY * offset * 0.5);
+              this.mbCtx.stroke();
+            }
+          }
+
+          // 3. Radial Speed Blur Lines (Cinematic Zoom FX)
+          if (speed > 1.8) {
+            const numRays = 28;
+            this.mbCtx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+            this.mbCtx.lineWidth = 1.6;
+            for (let i = 0; i < numRays; i++) {
+              const angle = (i / numRays) * Math.PI * 2 + (Date.now() * 0.0015);
+              const innerR = Math.min(w, h) * 0.22;
+              const outerR = Math.max(w, h) * 0.85;
+              const x1 = px + Math.cos(angle) * innerR;
+              const y1 = py + Math.sin(angle) * innerR;
+              const x2 = px + Math.cos(angle) * outerR;
+              const y2 = py + Math.sin(angle) * outerR;
+
+              this.mbCtx.beginPath();
+              this.mbCtx.moveTo(x1, y1);
+              this.mbCtx.lineTo(x2, y2);
+              this.mbCtx.stroke();
+            }
+          }
+        }
+
+        // 4. Lens Flare Bloom Pulse on Impact Frame
+        if (this.cameraShakeIntensity > 0.12) {
+          const bloomRad = Math.min(220, 50 + this.cameraShakeIntensity * 240);
+          const bloomGrad = this.mbCtx.createRadialGradient(px, py, 0, px, py, bloomRad);
+          bloomGrad.addColorStop(0, `rgba(255, 255, 255, ${Math.min(0.85, this.cameraShakeIntensity)})`);
+          bloomGrad.addColorStop(0.35, `rgba(253, 224, 71, ${Math.min(0.45, this.cameraShakeIntensity * 0.65)})`);
+          bloomGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+          this.mbCtx.fillStyle = bloomGrad;
+          this.mbCtx.beginPath();
+          this.mbCtx.arc(px, py, bloomRad, 0, Math.PI * 2);
+          this.mbCtx.fill();
+        }
       }
 
       updateWind() {
@@ -1751,8 +2052,9 @@
 
       setupScene() {
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x0a0f1d);
-        this.scene.fog = new THREE.FogExp2(0x0a0f1d, 0.012);
+        // Vibrant clear azure sunny sky
+        this.scene.background = new THREE.Color(0x38bdf8);
+        this.scene.fog = new THREE.FogExp2(0x93c5fd, 0.003);
 
         this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
         // Positioned 3rd-person behind ball looking toward goal
@@ -1769,67 +2071,177 @@
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.container.appendChild(this.renderer.domElement);
 
-        // Lighting
-        const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.6);
+        // Warm Sunny Daylight & Skylight
+        const ambientLight = new THREE.AmbientLight(0xfef08a, 0.75);
         this.scene.add(ambientLight);
 
-        const mainSun = new THREE.DirectionalLight(0xfffaed, 1.2);
-        mainSun.position.set(15, 30, 20);
+        // Hemisphere light (Sky blue bounce from above, grass green bounce from field)
+        const skyHemiLight = new THREE.HemisphereLight(0x38bdf8, 0x15803d, 0.65);
+        this.scene.add(skyHemiLight);
+
+        // High Bright Direct Sunlight
+        const mainSun = new THREE.DirectionalLight(0xfffbeb, 2.2);
+        mainSun.position.set(30, 50, 25);
         mainSun.castShadow = true;
         mainSun.shadow.mapSize.width = 2048;
         mainSun.shadow.mapSize.height = 2048;
         mainSun.shadow.camera.near = 0.5;
-        mainSun.shadow.camera.far = 60;
-        mainSun.shadow.camera.left = -12;
-        mainSun.shadow.camera.right = 12;
-        mainSun.shadow.camera.top = 22;
-        mainSun.shadow.camera.bottom = -5;
+        mainSun.shadow.camera.far = 80;
+        mainSun.shadow.camera.left = -18;
+        mainSun.shadow.camera.right = 18;
+        mainSun.shadow.camera.top = 28;
+        mainSun.shadow.camera.bottom = -8;
         mainSun.shadow.bias = -0.0004;
         mainSun.shadow.normalBias = 0.02;
         this.scene.add(mainSun);
 
-        // Stadium Floodlights
+        // 3D Sun Disk & Lens Flare Halo Corona
+        const sunGroup = new THREE.Group();
+        sunGroup.position.set(35, 55, -45);
+
+        const sunCoreGeo = new THREE.SphereGeometry(3.5, 32, 32);
+        const sunCoreMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const sunCore = new THREE.Mesh(sunCoreGeo, sunCoreMat);
+        sunGroup.add(sunCore);
+
+        const sunGlowCanvas = document.createElement('canvas');
+        sunGlowCanvas.width = 256;
+        sunGlowCanvas.height = 256;
+        const sgCtx = sunGlowCanvas.getContext('2d');
+        const sgGrad = sgCtx.createRadialGradient(128, 128, 0, 128, 128, 128);
+        sgGrad.addColorStop(0, 'rgba(255, 253, 230, 0.95)');
+        sgGrad.addColorStop(0.25, 'rgba(255, 220, 100, 0.60)');
+        sgGrad.addColorStop(0.60, 'rgba(255, 180, 50, 0.20)');
+        sgGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        sgCtx.fillStyle = sgGrad;
+        sgCtx.fillRect(0, 0, 256, 256);
+
+        const sunGlowTex = new THREE.CanvasTexture(sunGlowCanvas);
+        const sunGlowMat = new THREE.MeshBasicMaterial({
+          map: sunGlowTex,
+          transparent: true,
+          opacity: 0.9,
+          depthWrite: false
+        });
+        const sunGlow = new THREE.Mesh(new THREE.PlaneGeometry(28, 28), sunGlowMat);
+        sunGlow.lookAt(0, 0, 0);
+        sunGroup.add(sunGlow);
+        this.scene.add(sunGroup);
+
+        // Fluffy Sunny Sky Cloud Puffs
+        const cloudMat = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: 0.72
+        });
+
+        const cloudPositions = [
+          [-40, 28, -35, 12],
+          [-18, 34, -40, 15],
+          [20, 32, -38, 14],
+          [45, 26, -30, 10]
+        ];
+
+        cloudPositions.forEach(([cx, cy, cz, cSize]) => {
+          const cloudGroup = new THREE.Group();
+          cloudGroup.position.set(cx, cy, cz);
+
+          const puffCount = 5;
+          for (let p = 0; p < puffCount; p++) {
+            const puffGeo = new THREE.SphereGeometry(cSize * (0.5 + Math.random() * 0.5), 12, 12);
+            const puff = new THREE.Mesh(puffGeo, cloudMat);
+            puff.position.set(
+              (Math.random() - 0.5) * cSize,
+              (Math.random() - 0.5) * (cSize * 0.3),
+              (Math.random() - 0.5) * (cSize * 0.4)
+            );
+            cloudGroup.add(puff);
+          }
+          this.scene.add(cloudGroup);
+        });
+
+        // Stadium Floodlight Towers (Daytime off mode)
         [
           [-22, 18, -10],
           [22, 18, -10],
           [-22, 18, 25],
           [22, 18, 25]
         ].forEach(pos => {
-          const spot = new THREE.SpotLight(0xffffff, 0.8, 80, Math.PI / 4, 0.5);
+          const spot = new THREE.SpotLight(0xfffbeb, 0.2, 80, Math.PI / 4, 0.5);
           spot.position.set(...pos);
           spot.target.position.set(0, 1, 0);
           this.scene.add(spot);
           this.scene.add(spot.target);
-
-          // Volumetric light beam cone
-          const beamGeo = new THREE.ConeGeometry(3, 22, 16, 1, true);
-          beamGeo.translate(0, -11, 0);
-          beamGeo.rotateX(Math.PI / 2);
-          const beamMat = new THREE.MeshBasicMaterial({
-            color: 0xffffff,
-            transparent: true,
-            opacity: 0.08,
-            side: THREE.DoubleSide
-          });
-          const beam = new THREE.Mesh(beamGeo, beamMat);
-          beam.position.set(...pos);
-          beam.lookAt(0, 1, 0);
-          this.scene.add(beam);
         });
       }
 
       setupStadium() {
-        // Grass Pitch
+        // Grass Pitch with 3D Bump Map for dynamic lighting
         const pitchGeo = new THREE.PlaneGeometry(120, 120);
         const pitchMat = new THREE.MeshStandardMaterial({
           map: createGrassTexture(),
-          roughness: 0.8,
-          metalness: 0.1
+          bumpMap: createGrassBumpTexture(),
+          bumpScale: 0.018,
+          roughness: 0.65,
+          metalness: 0.05
         });
         const pitch = new THREE.Mesh(pitchGeo, pitchMat);
         pitch.rotation.x = -Math.PI / 2;
         pitch.receiveShadow = true;
         this.scene.add(pitch);
+
+        // 3D Physical Grass Blade Tufts (Instanced Mesh for 3D Turf depth)
+        const grassTuftGeo = new THREE.BufferGeometry();
+        const bladeVertices = new Float32Array([
+          // Plane 1 (Facing X-Z)
+          -0.012, 0, 0,    0.012, 0, 0,   -0.006, 0.025, 0,
+           0.012, 0, 0,    0.006, 0.025, 0, -0.006, 0.025, 0,
+          // Plane 2 (Rotated 90 deg)
+          0, 0, -0.012,    0, 0, 0.012,   0, 0.025, -0.006,
+          0, 0, 0.012,     0, 0.025, 0.006, 0, 0.025, -0.006
+        ]);
+        grassTuftGeo.setAttribute('position', new THREE.BufferAttribute(bladeVertices, 3));
+        grassTuftGeo.computeVertexNormals();
+
+        const grassTuftMat = new THREE.MeshStandardMaterial({
+          color: 0x22c55e,
+          roughness: 0.6,
+          metalness: 0.05,
+          side: THREE.DoubleSide
+        });
+
+        const tuftCount = 4500;
+        const grassInstMesh = new THREE.InstancedMesh(grassTuftGeo, grassTuftMat, tuftCount);
+        grassInstMesh.receiveShadow = true;
+
+        const dummy = new THREE.Object3D();
+        for (let i = 0; i < tuftCount; i++) {
+          let x, z;
+          if (i < 2800) {
+            // Dense concentration around penalty spot, ball, and kicker (z: 6 to 16, x: -10 to 10)
+            x = (Math.random() - 0.5) * 20;
+            z = 6 + Math.random() * 10;
+          } else {
+            // Distributed across goal mouth and penalty box (z: -3 to 22, x: -32 to 32)
+            x = (Math.random() - 0.5) * 64;
+            z = -3 + Math.random() * 25;
+          }
+
+          const scaleY = 0.6 + Math.random() * 0.5;
+          const scaleXZ = 0.6 + Math.random() * 0.4;
+          const rotY = Math.random() * Math.PI * 2;
+          const tiltX = (Math.random() - 0.5) * 0.25;
+          const tiltZ = (Math.random() - 0.5) * 0.25;
+
+          dummy.position.set(x, 0.0, z);
+          dummy.rotation.set(tiltX, rotY, tiltZ);
+          dummy.scale.set(scaleXZ, scaleY, scaleXZ);
+          dummy.updateMatrix();
+
+          grassInstMesh.setMatrixAt(i, dummy.matrix);
+        }
+        grassInstMesh.instanceMatrix.needsUpdate = true;
+        this.scene.add(grassInstMesh);
 
         // White Line Markings
         const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -1961,7 +2373,7 @@
         this.scene.add(netGroup);
 
         // Stadium Wall
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.7 });
         const backWall = new THREE.Mesh(new THREE.BoxGeometry(70, 16, 1), wallMat);
         backWall.position.set(0, 8, -16);
         this.scene.add(backWall);
@@ -2619,6 +3031,11 @@
         this.kickFollowThrough = 0;
         this.shotTimer = 0;
 
+        this.isReplay = false;
+        this.hasCollided = false;
+        const badge = document.getElementById('replay-badge');
+        if (badge) badge.classList.remove('active');
+
         this.updateWind();
 
         this.ballPos.set(0, 0.22, 11.0);
@@ -2665,6 +3082,93 @@
         this.confetti.stop();
       }
 
+      startGoalReplay() {
+        if (!this.lastGoalShot) {
+          this.showGoalResultModal();
+          return;
+        }
+
+        this.isReplay = true;
+
+        // Hide open modals during replay playback
+        document.getElementById('modal-goal').classList.add('modal-hidden');
+        document.getElementById('modal-success').classList.add('modal-hidden');
+
+        // Show TV broadcast slow-mo replay badge and cinematic overlay
+        const badge = document.getElementById('replay-badge');
+        if (badge) badge.classList.add('active');
+
+        const cinematicOverlay = document.getElementById('cinematic-replay-overlay');
+        if (cinematicOverlay) cinematicOverlay.classList.add('active');
+
+        // Trigger cinematic camera shake on replay entry
+        this.triggerCameraShake(0.40);
+
+        // Reset player and ball positions for replay
+        this.ballPos.set(0, 0.22, 11.0);
+        this.ball.position.copy(this.ballPos);
+        this.ball.rotation.set(0, 0, 0);
+        this.ballVel.set(0, 0, 0);
+        this.ballSpin.set(0, 0, 0);
+
+        this.kickerGroup.position.copy(this.kickerDefaultPos);
+        this.kickerGroup.rotation.set(0, -Math.PI / 10, 0);
+        this.kickerRightLeg.rotation.set(0, 0, 0);
+        this.kickerLeftLeg.rotation.set(0, 0, 0);
+        this.kickerLeftArm.rotation.set(0, 0, Math.PI / 12);
+        this.kickerRightArm.rotation.set(0, 0, -Math.PI / 12);
+
+        this.keeperGroup.position.copy(this.keeperDefaultPos);
+        this.keeperGroup.rotation.z = 0;
+        this.keeperLeftArm.rotation.z = Math.PI / 4;
+        this.keeperRightArm.rotation.z = -Math.PI / 4;
+        this.keeperDiving = false;
+
+        // Set dramatic Side-View Camera position
+        // X = -9.2m to side of pitch, Y = 2.4m, Z = 6.0m midway between penalty spot and goal
+        this.camera.position.set(-9.2, 2.4, 6.0);
+        this.camera.lookAt(0, 1.2, 5.5);
+
+        this.pendingShot = { ...this.lastGoalShot.shot };
+        this.gameState = 'RUNNING';
+        this.runUpProgress = 0;
+        this.kickFollowThrough = 0;
+        this.shotTimer = 0;
+
+        if (this.lastGoalShot.keeperTarget) {
+          this.keeperTargetPos = this.lastGoalShot.keeperTarget.clone();
+        }
+      }
+
+      stopGoalReplay() {
+        this.isReplay = false;
+        const badge = document.getElementById('replay-badge');
+        if (badge) badge.classList.remove('active');
+
+        const cinematicOverlay = document.getElementById('cinematic-replay-overlay');
+        if (cinematicOverlay) cinematicOverlay.classList.remove('active');
+
+        if (this.mbCtx) {
+          this.mbCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+        }
+
+        // Restore default camera angle
+        this.camera.position.copy(this.defaultCamPos);
+        this.camera.lookAt(this.defaultCamTarget);
+      }
+
+      showGoalResultModal() {
+        document.getElementById('score-goals').innerText = `${this.goals} / 5`;
+        if (this.goals >= 5) {
+          document.getElementById('modal-success').classList.remove('modal-hidden');
+        } else {
+          document.getElementById('goal-count-text').innerText = `${this.goals} / 5 GOALS SCORED`;
+          const remaining = 5 - this.goals;
+          document.getElementById('goal-remaining-text').innerText = `${remaining} MORE GOAL${remaining > 1 ? 'S' : ''} TO BEAT THE GAME!`;
+          document.getElementById('modal-goal').classList.remove('modal-hidden');
+        }
+      }
+
       updatePhysics(dt) {
         // --- PLAYER RUN-UP ANIMATION BEFORE STRIKE ---
         if (this.gameState === 'RUNNING') {
@@ -2692,6 +3196,9 @@
 
             soundEngine.playKick();
 
+            // Trigger Dynamic Impact Camera Shake!
+            this.triggerCameraShake(this.isReplay ? 0.70 : 0.40);
+
             const { horizAngle, velY, speedPower } = this.pendingShot;
             this.ballVel.set(horizAngle, velY, -speedPower);
             this.ballSpin.set((Math.random() - 0.5) * 5, -horizAngle * 0.6, 0);
@@ -2702,13 +3209,16 @@
           return;
         }
 
-        if (this.gameState !== 'KICKED') return;
+        if (this.gameState !== 'KICKED' && this.gameState !== 'RESULT') return;
 
-        // 3-second shot timeout check
-        this.shotTimer += dt;
-        if (this.shotTimer >= 3.0) {
-          this.triggerResult('MISSED');
-          return;
+        // Shot timeout check
+        if (this.gameState === 'KICKED') {
+          this.shotTimer += dt;
+          if (this.shotTimer >= 3.5) {
+            this.hasCollided = true;
+            this.triggerResult('MISSED');
+            return;
+          }
         }
 
         // Apply Magnus spin effect (curve)
@@ -2730,35 +3240,112 @@
         this.ball.rotateX(this.ballVel.z * dt * 3);
         this.ball.rotateY(this.ballVel.x * dt * 3);
 
-        // Update ball shadow
-        this.ballShadow.position.set(this.ballPos.x, 0.015, this.ballPos.z);
-        const heightAboveGround = Math.max(0, this.ballPos.y - 0.22);
-        const shadowScale = Math.max(0.2, 1.0 + heightAboveGround * 0.25);
+        // Calculate floor surface level depending on stadium geometry (Pitch vs LED board vs Grandstand steps)
+        let currentFloorY = 0.22;
+        if (this.ballPos.z < -2.7 && Math.abs(this.ballPos.x) < 26.0) {
+          // Grandstands seats and steps behind goal line
+          const distInStands = -2.7 - this.ballPos.z;
+          currentFloorY = Math.min(8.2, 0.8 + distInStands * 0.70);
+        } else if (this.ballPos.z <= -2.1 && this.ballPos.z >= -2.7 && Math.abs(this.ballPos.x) <= 16.0 && this.ballPos.y <= 2.1) {
+          // Top of LED Sponsor Board
+          currentFloorY = 2.0;
+        }
+
+        // Update ball shadow on current surface
+        this.ballShadow.position.set(this.ballPos.x, currentFloorY + 0.015, this.ballPos.z);
+        const heightAboveSurface = Math.max(0, this.ballPos.y - currentFloorY);
+        const shadowScale = Math.max(0.2, 1.0 + heightAboveSurface * 0.25);
         this.ballShadow.scale.set(shadowScale, shadowScale, shadowScale);
         if (this.ballShadow.material) {
-          this.ballShadow.material.opacity = Math.max(0.08, 0.8 - heightAboveGround * 0.18);
+          this.ballShadow.material.opacity = Math.max(0.08, 0.8 - heightAboveSurface * 0.18);
         }
 
-        // Dynamic Camera Follow
-        this.camera.position.x = THREE.MathUtils.lerp(this.camera.position.x, this.ballPos.x * 0.3, 0.05);
-        this.camera.position.y = THREE.MathUtils.lerp(this.camera.position.y, 1.8 + this.ballPos.y * 0.2, 0.05);
-        this.camera.lookAt(this.ballPos.x * 0.5, 1.2, this.ballPos.z * 0.5);
+        // Camera Positioning (Side view angle during slow-motion replay vs standard rear view)
+        if (this.isReplay) {
+          const targetCamX = -8.8;
+          const targetCamY = 2.2 + Math.max(0, this.ballPos.y * 0.15);
+          const targetCamZ = 6.0 + (this.ballPos.z - 5.5) * 0.22;
 
-        // Ground bounce
-        if (this.ballPos.y <= 0.22) {
-          this.ballPos.y = 0.22;
-          this.ballVel.y = -this.ballVel.y * 0.55; // dampening
-          this.ballVel.x *= 0.8;
-          this.ballVel.z *= 0.8;
+          this.camera.position.x = THREE.MathUtils.lerp(this.camera.position.x, targetCamX, 0.08);
+          this.camera.position.y = THREE.MathUtils.lerp(this.camera.position.y, targetCamY, 0.08);
+          this.camera.position.z = THREE.MathUtils.lerp(this.camera.position.z, targetCamZ, 0.08);
+          this.camera.lookAt(this.ballPos.x * 0.6, Math.max(0.8, this.ballPos.y), this.ballPos.z);
+        } else {
+          // Dynamic Camera Follow for standard play (smoothly tracks ball into stands or pitch)
+          this.camera.position.x = THREE.MathUtils.lerp(this.camera.position.x, this.ballPos.x * 0.35, 0.05);
+          this.camera.position.y = THREE.MathUtils.lerp(this.camera.position.y, 1.8 + Math.max(0, this.ballPos.y * 0.15), 0.05);
+          this.camera.position.z = THREE.MathUtils.lerp(this.camera.position.z, Math.max(12.0, 18.0 + (this.ballPos.z - 11.0) * 0.15), 0.05);
+          this.camera.lookAt(
+            this.ballPos.x * 0.55,
+            Math.max(1.0, this.ballPos.y * 0.5),
+            this.ballPos.z * 0.75
+          );
         }
 
-        // --- Collision Checks ---
+        // --- Surface Collision / Bounce ---
+        if (this.ballPos.y <= currentFloorY) {
+          this.ballPos.y = currentFloorY;
+          this.ballVel.y = Math.abs(this.ballVel.y) * 0.50 + (currentFloorY > 0.5 ? 0.4 : 0); // bounce off ground or grandstand steps
+          this.ballVel.x *= 0.75;
+          this.ballVel.z *= 0.75;
+          this.ballSpin.multiplyScalar(0.5);
+        }
+
+        // --- LED Board Front Bounce (Outside goal width) ---
+        if (this.ballPos.z <= -2.4 && this.ballPos.z >= -2.7 && Math.abs(this.ballPos.x) <= 16.0 && this.ballPos.y <= 2.1 && Math.abs(this.ballPos.x) > 3.66) {
+          this.ballPos.z = -2.4;
+          this.ballVel.z = Math.abs(this.ballVel.z) * 0.45 + 1.8; // rebound forward into penalty box
+          this.ballVel.y = Math.max(1.5, Math.abs(this.ballVel.y) * 0.5);
+          soundEngine.playKick();
+          this.triggerCameraShake(0.30);
+        }
+
+        // --- Goal Net Physical Containment ---
+        // Traps and cushions the ball inside the net frame so it never pierces through the back or sides
+        if (this.ballPos.z <= 0.1 && Math.abs(this.ballPos.x) < 3.66 && this.ballPos.y < 2.5) {
+          // Back Net Boundary (Net mesh at z = -1.80m)
+          if (this.ballPos.z <= -1.60) {
+            this.ballPos.z = -1.60;
+            this.ballVel.z = Math.max(0, -this.ballVel.z * 0.2); // Bounces gently forward off net, cannot pass back net
+            this.ballVel.x *= 0.5;
+            this.ballVel.y *= 0.5;
+            this.ballSpin.multiplyScalar(0.3);
+            this.triggerCameraShake(0.38);
+          }
+          // Top Net Boundary (Net mesh at y = 2.44m)
+          if (this.ballPos.y >= 2.30 && this.ballPos.z < 0) {
+            this.ballPos.y = 2.30;
+            this.ballVel.y = -Math.abs(this.ballVel.y) * 0.3;
+            this.ballVel.z *= 0.6;
+          }
+          // Left Net Boundary (Net mesh at x = -3.66m)
+          if (this.ballPos.x <= -3.48 && this.ballPos.z < 0) {
+            this.ballPos.x = -3.48;
+            this.ballVel.x = Math.abs(this.ballVel.x) * 0.3;
+          }
+          // Right Net Boundary (Net mesh at x = +3.66m)
+          if (this.ballPos.x >= 3.48 && this.ballPos.z < 0) {
+            this.ballPos.x = 3.48;
+            this.ballVel.x = -Math.abs(this.ballVel.x) * 0.3;
+          }
+        }
+
+        // --- Collision Checks --- (Only check if not already collided)
+        if (this.hasCollided) return;
+
         const goalWidth = 7.32;
         const goalHeight = 2.44;
 
-        // 1. Keeper Save Check
+        // 1. Keeper Save Check (Ball hits goalkeeper body/hands & deflects back)
         const distToKeeper = this.ballPos.distanceTo(this.keeperGroup.position);
         if (distToKeeper < 1.15 && this.ballPos.z > -0.5 && this.ballPos.z < 1.5) {
+          this.hasCollided = true;
+          soundEngine.playKick(); // Glove bounce impact sound
+          this.triggerCameraShake(0.52);
+          this.ballVel.z = Math.abs(this.ballVel.z) * 0.5 + 3.0; // Bounces back into penalty box
+          this.ballVel.x = (this.ballPos.x - this.keeperGroup.position.x) * 4.5 + (Math.random() - 0.5) * 2;
+          this.ballVel.y = Math.max(2.0, Math.abs(this.ballVel.y) * 0.5 + 1.2);
+          this.ballSpin.set((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, 0);
           this.triggerResult('SAVED');
           return;
         }
@@ -2766,18 +3353,25 @@
         // 2. Post / Crossbar Hit Check
         if (Math.abs(this.ballPos.z) < 0.4) {
           // Left or Right Post
-          if (Math.abs(Math.abs(this.ballPos.x) - goalWidth / 2) < 0.25 && this.ballPos.y <= goalHeight) {
+          if (Math.abs(Math.abs(this.ballPos.x) - goalWidth / 2) < 0.28 && this.ballPos.y <= goalHeight) {
+            this.hasCollided = true;
             soundEngine.playPostHit();
-            this.ballVel.z = -this.ballVel.z * 0.6;
-            this.ballVel.x = -this.ballVel.x * 0.6;
+            this.triggerCameraShake(0.65);
+            this.ballVel.z = Math.abs(this.ballVel.z) * 0.55 + 2.2; // Bounce back outwards
+            this.ballVel.x = (this.ballPos.x > 0 ? 1 : -1) * (Math.abs(this.ballVel.x) * 0.6 + 2.2); // Bounce outwards laterally
+            this.ballVel.y = Math.max(1.2, this.ballVel.y * 0.5);
+            this.ballSpin.set((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, 0);
             this.triggerResult('POST');
             return;
           }
           // Crossbar
-          if (Math.abs(this.ballPos.x) < goalWidth / 2 && Math.abs(this.ballPos.y - goalHeight) < 0.25) {
+          if (Math.abs(this.ballPos.x) < goalWidth / 2 && Math.abs(this.ballPos.y - goalHeight) < 0.28) {
+            this.hasCollided = true;
             soundEngine.playPostHit();
-            this.ballVel.z = -this.ballVel.z * 0.6;
-            this.ballVel.y = -this.ballVel.y * 0.6;
+            this.triggerCameraShake(0.65);
+            this.ballVel.z = Math.abs(this.ballVel.z) * 0.55 + 2.2; // Bounce back outwards
+            this.ballVel.y = -Math.abs(this.ballVel.y) * 0.6 - 1.2; // Bounce downwards
+            this.ballSpin.set((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, 0);
             this.triggerResult('POST');
             return;
           }
@@ -2786,6 +3380,9 @@
         // 3. Goal Scored Check (Ball behind goal line, inside posts and under crossbar)
         if (this.ballPos.z <= 0 && this.ballPos.z > -2.0) {
           if (Math.abs(this.ballPos.x) < (goalWidth / 2 - 0.1) && this.ballPos.y > 0.1 && this.ballPos.y < (goalHeight - 0.1)) {
+            this.hasCollided = true;
+            this.ballVel.multiplyScalar(0.25); // Slow down in net
+            this.triggerCameraShake(this.isReplay ? 0.65 : 0.48);
             this.triggerResult('GOAL');
             return;
           }
@@ -2793,6 +3390,7 @@
 
         // 4. Missed Wide / Over / Past Goal Line
         if (this.ballPos.z <= -0.2 || Math.abs(this.ballPos.x) > 6.5 || this.ballPos.y > 5.5) {
+          this.hasCollided = true;
           this.triggerResult('MISSED');
         }
       }
@@ -2804,9 +3402,22 @@
         const speedPower = this.pendingShot ? this.pendingShot.speedPower : 0;
         this.maxSpeedPower = Math.max(this.maxSpeedPower || 0, speedPower);
 
+        if (this.isReplay) {
+          // Slow-motion replay sequence finish: linger in net then restore camera and show result modal
+          setTimeout(() => {
+            this.stopGoalReplay();
+            this.showGoalResultModal();
+          }, 1000);
+          return;
+        }
+
         if (type === 'GOAL') {
           this.goals++;
           this.crowdState = 'JUMPING';
+          this.lastGoalShot = {
+            shot: { ...this.pendingShot },
+            keeperTarget: this.keeperTargetPos ? this.keeperTargetPos.clone() : null
+          };
         } else if (type === 'SAVED') {
           this.saves++;
           this.crowdState = 'DISAPPOINTED';
@@ -2829,20 +3440,11 @@
 
         setTimeout(() => {
           if (type === 'GOAL') {
-            document.getElementById('score-goals').innerText = `${this.goals} / 5`;
-            
             soundEngine.playGoalCheer();
             soundEngine.playWhistle();
             this.confetti.spawn();
-
-            if (this.goals >= 5) {
-              document.getElementById('modal-success').classList.remove('modal-hidden');
-            } else {
-              document.getElementById('goal-count-text').innerText = `${this.goals} / 5 GOALS SCORED`;
-              const remaining = 5 - this.goals;
-              document.getElementById('goal-remaining-text').innerText = `${remaining} MORE GOAL${remaining > 1 ? 'S' : ''} TO BEAT THE GAME!`;
-              document.getElementById('modal-goal').classList.remove('modal-hidden');
-            }
+            // Show goal modal with option button to watch replay
+            this.showGoalResultModal();
           } else {
             soundEngine.playDisappointment();
 
@@ -2857,7 +3459,7 @@
 
             document.getElementById('modal-fail').classList.remove('modal-hidden');
           }
-        }, 600);
+        }, type === 'GOAL' ? 800 : 1800);
       }
 
       resetGame() {
@@ -2877,7 +3479,8 @@
       animate(time) {
         requestAnimationFrame((t) => this.animate(t));
 
-        const dt = 0.016; // fixed timestep
+        // Slow motion time factor during replay (0.35x speed)
+        const dt = this.isReplay ? 0.016 * 0.35 : 0.016;
         const sec = time * 0.001;
 
         // Update Physics
@@ -2996,6 +3599,16 @@
           });
         }
 
+        // Apply Dynamic Camera Shake offset on impact frames
+        if (this.cameraShakeIntensity > 0.001) {
+          const shake = this.cameraShakeIntensity;
+          this.camera.position.x += (Math.random() - 0.5) * shake;
+          this.camera.position.y += (Math.random() - 0.5) * shake;
+          this.camera.position.z += (Math.random() - 0.5) * shake;
+          this.cameraShakeIntensity = THREE.MathUtils.lerp(this.cameraShakeIntensity, 0, dt * 10);
+        }
+
+        this.renderMotionBlurOverlay();
         this.renderer.render(this.scene, this.camera);
       }
 
@@ -3004,6 +3617,7 @@
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.resizeAimCanvas();
+        this.resizeMotionBlurCanvas();
       }
     }
 
@@ -3064,6 +3678,21 @@
         game.resetPositions();
         soundEngine.playWhistle();
       });
+
+      // Watch Replay Buttons
+      const btnWatchReplay = document.getElementById('btn-watch-replay');
+      if (btnWatchReplay) {
+        btnWatchReplay.addEventListener('click', () => {
+          game.startGoalReplay();
+        });
+      }
+
+      const btnWatchVictoryReplay = document.getElementById('btn-watch-victory-replay');
+      if (btnWatchVictoryReplay) {
+        btnWatchVictoryReplay.addEventListener('click', () => {
+          game.startGoalReplay();
+        });
+      }
 
       // Return to Title Button (5 Goals Victory)
       document.getElementById('btn-replay').addEventListener('click', () => {
