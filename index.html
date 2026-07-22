@@ -704,9 +704,11 @@
     #shot-map-canvas {
       width: 100%;
       max-width: 250px;
-      height: 110px;
+      aspect-ratio: 280 / 130;
+      height: auto;
       border-radius: 6px;
       background: #022c22;
+      display: block;
     }
 
     .shot-map-legend {
@@ -756,9 +758,6 @@
       .stat-num {
         font-size: 14px;
       }
-      #shot-map-canvas {
-        height: 95px;
-      }
     }
   </style>
 </head>
@@ -783,7 +782,7 @@
       </div>
       <div class="hud-card" id="hud-wind" title="Wind speed and direction affecting ball flight">
         <span class="hud-label">WIND</span>
-        <span id="wind-val" class="hud-val" style="font-size: 13px; color: #a7f3d0;">💨 3 km/h ➔</span>
+        <span id="wind-val" class="hud-val" style="font-size: 12px; color: #a7f3d0;">💨 3 km/h ➔</span>
       </div>
     </div>
     
@@ -851,7 +850,9 @@
       <h1 class="game-title">PENALTY <span class="title-accent">SHOOTOUT</span></h1>
       
       <div class="player-card-preview">
-        <div class="avatar-circle">⚽</div>
+        <div class="avatar-circle" style="padding: 0; overflow: hidden; display: block; background: none;">
+          <img src="raiza_barca.png" style="width: 100%; height: 100%; object-fit: cover;" alt="Raiza">
+        </div>
         <div>
           <div class="player-name">RAIZA TANIA #13</div>
           <div class="player-sub">Star Striker • FC Barcelona</div>
@@ -1734,6 +1735,7 @@
         this.misses = 0;
         this.maxSpeedPower = 0;
         this.shotLogs = [];
+        this.gkSaveChance = Math.floor(25 + Math.random() * 51); // 25% to 75% at random each time
 
         this.windX = 0;
         this.windZ = 0;
@@ -1744,6 +1746,13 @@
         this.isReplay = false;
         this.lastGoalShot = null;
         this.cameraShakeIntensity = 0;
+        
+        // Goalkeeper physical state and diving kinematics
+        this.keeperState = 'STANDING'; // STANDING, DIVING, LANDED
+        this.keeperVel = new THREE.Vector3(0, 0, 0);
+        this.keeperGravity = -12.0;
+        this.keeperTime = 0;
+        this.keeperLandTime = 0;
         
         this.setupScene();
         this.setupStadium();
@@ -2013,11 +2022,23 @@
           const goalSpanX = postRight - postLeft;
           const goalSpanY = groundY - barTop;
 
-          const normX = shot.horizAngle / 3.66;
-          const normY = shot.velY / 6.5;
+          let px, py;
+          if (shot.x !== undefined && shot.y !== undefined) {
+            // Precise physical mapping:
+            // goal post left is x = -3.66, post right is x = 3.66
+            const normX = THREE.MathUtils.clamp(shot.x / 3.66, -1.8, 1.8);
+            // ground level is y = 0.22, crossbar is y = 2.44
+            const normY = THREE.MathUtils.clamp((shot.y - 0.22) / (2.44 - 0.22), -0.5, 1.6);
 
-          const px = (w / 2) + (normX * (goalSpanX / 2));
-          const py = groundY - (normY * goalSpanY);
+            px = (w / 2) + (normX * (goalSpanX / 2));
+            py = groundY - (normY * goalSpanY);
+          } else {
+            // Backward-compatible fallback
+            const normX = shot.horizAngle / 3.66;
+            const normY = shot.velY / 6.5;
+            px = (w / 2) + (normX * (goalSpanX / 2));
+            py = groundY - (normY * goalSpanY);
+          }
 
           let color = '#22c55e';
           let shadowColor = '#22c55e';
@@ -2056,9 +2077,9 @@
         this.scene.fog = new THREE.FogExp2(0x93c5fd, 0.003);
 
         this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
-        // Positioned 3rd-person behind ball looking toward goal
-        this.defaultCamPos = new THREE.Vector3(0, 1.8, 14.8);
-        this.defaultCamTarget = new THREE.Vector3(0, 1.2, 0);
+        // Positioned 3rd-person behind ball looking toward goal, further back to frame 3/4 of Raiza
+        this.defaultCamPos = new THREE.Vector3(0, 2.3, 17.5);
+        this.defaultCamTarget = new THREE.Vector3(0, 1.1, 2.5);
         this.camera.position.copy(this.defaultCamPos);
         this.camera.lookAt(this.defaultCamTarget);
 
@@ -2322,39 +2343,47 @@
         crossbar.castShadow = true;
         this.scene.add(crossbar);
 
-        // Goal Net - Real 3D Enclosure Net with High Visibility
+        // Goal Net - Real 3D Enclosure Net with segmented meshes for dynamic ragdoll physics
         const netTex = createGoalNetTexture();
-        netTex.repeat.set(6, 3);
-        const netMat = new THREE.MeshBasicMaterial({
+        netTex.repeat.set(10, 5);
+        const netMat = new THREE.MeshStandardMaterial({
           map: netTex,
           transparent: true,
-          opacity: 0.88,
-          side: THREE.DoubleSide
+          opacity: 0.9,
+          side: THREE.DoubleSide,
+          roughness: 0.8,
+          metalness: 0.0,
+          alphaTest: 0.05
         });
 
         const netGroup = new THREE.Group();
 
-        // Back Net
-        const backNet = new THREE.Mesh(new THREE.PlaneGeometry(goalWidth, goalHeight), netMat);
+        // High fidelity segmented panels to enable smooth wave, drape, and impact deformation
+        const backNetGeo = new THREE.PlaneGeometry(goalWidth, goalHeight, 20, 12);
+        const backNet = new THREE.Mesh(backNetGeo, netMat);
         backNet.position.set(0, goalHeight / 2, -1.8);
+        backNet.castShadow = true;
         netGroup.add(backNet);
 
-        // Top Net
-        const topNet = new THREE.Mesh(new THREE.PlaneGeometry(goalWidth, 1.8), netMat);
+        const topNetGeo = new THREE.PlaneGeometry(goalWidth, 1.8, 20, 8);
+        const topNet = new THREE.Mesh(topNetGeo, netMat);
         topNet.rotation.x = Math.PI / 2;
         topNet.position.set(0, goalHeight, -0.9);
+        topNet.castShadow = true;
         netGroup.add(topNet);
 
-        // Left Net
-        const leftNet = new THREE.Mesh(new THREE.PlaneGeometry(1.8, goalHeight), netMat);
+        const leftNetGeo = new THREE.PlaneGeometry(1.8, goalHeight, 8, 12);
+        const leftNet = new THREE.Mesh(leftNetGeo, netMat);
         leftNet.rotation.y = Math.PI / 2;
         leftNet.position.set(-goalWidth / 2, goalHeight / 2, -0.9);
+        leftNet.castShadow = true;
         netGroup.add(leftNet);
 
-        // Right Net
-        const rightNet = new THREE.Mesh(new THREE.PlaneGeometry(1.8, goalHeight), netMat);
+        const rightNetGeo = new THREE.PlaneGeometry(1.8, goalHeight, 8, 12);
+        const rightNet = new THREE.Mesh(rightNetGeo, netMat);
         rightNet.rotation.y = -Math.PI / 2;
         rightNet.position.set(goalWidth / 2, goalHeight / 2, -0.9);
+        rightNet.castShadow = true;
         netGroup.add(rightNet);
 
         // Net Support Stanchions (Diagonal back poles)
@@ -2371,10 +2400,44 @@
 
         this.scene.add(netGroup);
 
+        // Initialize Net Ragdoll/Wave Physics Data Structure
+        this.netPhysics = {
+          meshes: [
+            {
+              mesh: backNet,
+              originalPositions: backNetGeo.attributes.position.array.slice(),
+              velocities: new Float32Array(backNetGeo.attributes.position.count * 3),
+              widthSegments: 20,
+              heightSegments: 12
+            },
+            {
+              mesh: topNet,
+              originalPositions: topNetGeo.attributes.position.array.slice(),
+              velocities: new Float32Array(topNetGeo.attributes.position.count * 3),
+              widthSegments: 20,
+              heightSegments: 8
+            },
+            {
+              mesh: leftNet,
+              originalPositions: leftNetGeo.attributes.position.array.slice(),
+              velocities: new Float32Array(leftNetGeo.attributes.position.count * 3),
+              widthSegments: 8,
+              heightSegments: 12
+            },
+            {
+              mesh: rightNet,
+              originalPositions: rightNetGeo.attributes.position.array.slice(),
+              velocities: new Float32Array(rightNetGeo.attributes.position.count * 3),
+              widthSegments: 8,
+              heightSegments: 12
+            }
+          ]
+        };
+
         // Stadium Wall
         const wallMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.7 });
         const backWall = new THREE.Mesh(new THREE.BoxGeometry(70, 16, 1), wallMat);
-        backWall.position.set(0, 8, -16);
+        backWall.position.set(0, 8, -21);
         this.scene.add(backWall);
 
         // ==========================================
@@ -2420,7 +2483,7 @@
         const skyBannerTex = new THREE.CanvasTexture(skyBannerCanvas);
         const skyBannerMat = new THREE.MeshBasicMaterial({ map: skyBannerTex });
         const skyBannerMesh = new THREE.Mesh(new THREE.PlaneGeometry(42, 4.8), skyBannerMat);
-        skyBannerMesh.position.set(0, 11.2, -15.4);
+        skyBannerMesh.position.set(0, 11.2, -20.4);
         this.scene.add(skyBannerMesh);
 
         // LED Sponsor Banner behind goal
@@ -2438,7 +2501,7 @@
         const ledTex = new THREE.CanvasTexture(ledCanvas);
         const ledMat = new THREE.MeshBasicMaterial({ map: ledTex });
         const ledBoard = new THREE.Mesh(new THREE.PlaneGeometry(32, 2), ledMat);
-        ledBoard.position.set(0, 1, -2.5);
+        ledBoard.position.set(0, 1, -7.5);
         this.scene.add(ledBoard);
 
         // ==========================================
@@ -2451,27 +2514,13 @@
         const standMatBarcaBlue = new THREE.MeshStandardMaterial({ color: 0x004d98, roughness: 0.6 });
         const flagPoleMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.3 });
 
-        // Build 6 Grandstand Steps/Tiers behind the goal
+        // Build 6 Grandstand Steps/Tiers behind the goal and on the sides
         const numTiers = 6;
-        for (let t = 0; t < numTiers; t++) {
-          const tierZ = -3.8 - t * 1.8;
-          const tierY = 1.2 + t * 1.25;
-          const tierMat = (t % 2 === 0) ? standMatBarcaBlue : standMatBarcaRed;
-
-          // Tier Seating Row
-          const bench = new THREE.Mesh(new THREE.BoxGeometry(52, 0.45, 1.8), tierMat);
-          bench.position.set(0, tierY, tierZ);
-          this.scene.add(bench);
-
-          // Populate Spectators in this Row
-          const cols = 28;
-          for (let c = 0; c < cols; c++) {
-            const specX = -21 + c * 1.5 + (Math.random() * 0.25 - 0.125);
-            const specY = tierY + 0.55;
-            const specZ = tierZ + (Math.random() * 0.2 - 0.1);
-
+        
+        const createSpectator = (specX, specY, specZ, rotY = 0) => {
             const specGroup = new THREE.Group();
             specGroup.position.set(specX, specY, specZ);
+            specGroup.rotation.y = rotY;
 
             // Shirt color: FC Barcelona palette (Barca Blue, Barca Red, Gold Yellow, White)
             const shirtRand = Math.random();
@@ -2482,7 +2531,7 @@
 
             const shirtMat = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.5 });
             const skinColors = [0xf8d2be, 0xe5b899, 0xd1a182, 0x8d5524];
-            const specSkinMat = new THREE.MeshStandardMaterial({ color: skinColors[c % skinColors.length], roughness: 0.6 });
+            const specSkinMat = new THREE.MeshStandardMaterial({ color: skinColors[Math.floor(Math.random() * skinColors.length)], roughness: 0.6 });
 
             // Spectator Torso
             const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.16, 0.5, 12), shirtMat);
@@ -2508,7 +2557,7 @@
 
             // Flag Pole & Flag (1 in every 4 spectators)
             let flagMesh = null;
-            if (c % 4 === 0) {
+            if (Math.random() < 0.25) {
               const flagGroup = new THREE.Group();
               flagGroup.position.set(0.22, 0.45, 0);
 
@@ -2545,8 +2594,44 @@
               flag: flagMesh,
               phase: Math.random() * Math.PI * 2
             });
-          }
-        }
+        };
+
+        const buildStand = (isSide, sign) => {
+            for (let t = 0; t < numTiers; t++) {
+                const tierY = 1.2 + t * 1.25;
+                const tierMat = (t % 2 === 0) ? standMatBarcaBlue : standMatBarcaRed;
+                
+                if (!isSide) {
+                    const tierZ = -8.8 - t * 1.8;
+                    const bench = new THREE.Mesh(new THREE.BoxGeometry(52, 0.45, 1.8), tierMat);
+                    bench.position.set(0, tierY, tierZ);
+                    this.scene.add(bench);
+                    
+                    const cols = 28;
+                    for (let c = 0; c < cols; c++) {
+                        const specX = -21 + c * 1.5 + (Math.random() * 0.25 - 0.125);
+                        const specZ = tierZ + (Math.random() * 0.2 - 0.1);
+                        createSpectator(specX, tierY + 0.55, specZ, 0);
+                    }
+                } else {
+                    const tierX = (17 + t * 1.8) * sign;
+                    const bench = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.45, 52), tierMat);
+                    bench.position.set(tierX, tierY, 8);
+                    this.scene.add(bench);
+                    
+                    const cols = 28;
+                    for (let c = 0; c < cols; c++) {
+                        const specZ = -12 + c * 1.5 + (Math.random() * 0.25 - 0.125);
+                        const specX = tierX + (Math.random() * 0.2 - 0.1);
+                        createSpectator(specX, tierY + 0.55, specZ, sign < 0 ? Math.PI / 2 : -Math.PI / 2);
+                    }
+                }
+            }
+        };
+
+        buildStand(false, 1); // back stand
+        buildStand(true, -1); // left stand
+        buildStand(true, 1);  // right stand
 
       }
 
@@ -2653,7 +2738,8 @@
         bangRight.position.set(0.14, -0.04, -0.12);
         headGroup.add(bangRight);
 
-        this.kickerGroup.add(headGroup);
+        this.kickerHeadGroup = headGroup;
+        this.kickerGroup.add(this.kickerHeadGroup);
 
         // Arms (Articulated Left & Right Arm)
         const armGeo = new THREE.CylinderGeometry(0.06, 0.05, 0.50, 16);
@@ -2680,44 +2766,51 @@
         // Legs (Thighs, Calves with Socks, Boots)
         const thighGeo = new THREE.CylinderGeometry(0.085, 0.07, 0.35, 16);
         const calfGeo = new THREE.CylinderGeometry(0.07, 0.055, 0.35, 16);
+        const bootGeo = new THREE.BoxGeometry(0.11, 0.09, 0.24);
 
-        // Left Leg
+        // Left Leg Group (pivot at hip y=0.65)
+        this.kickerLeftLegGroup = new THREE.Group();
+        this.kickerLeftLegGroup.position.set(-0.13, 0.65, 0);
+        this.kickerGroup.add(this.kickerLeftLegGroup);
+
         const leftThigh = new THREE.Mesh(thighGeo, skinMat);
-        leftThigh.position.set(-0.13, 0.48, 0);
+        leftThigh.position.set(0, -0.17, 0);
         leftThigh.castShadow = true;
-        this.kickerGroup.add(leftThigh);
+        this.kickerLeftLegGroup.add(leftThigh);
 
         this.kickerLeftLeg = new THREE.Mesh(calfGeo, sockMat);
-        this.kickerLeftLeg.position.set(-0.13, 0.20, 0);
+        this.kickerLeftLeg.position.set(0, -0.45, 0);
         this.kickerLeftLeg.castShadow = true;
-        this.kickerGroup.add(this.kickerLeftLeg);
+        this.kickerLeftLegGroup.add(this.kickerLeftLeg);
 
-        // Right Leg
+        const bootLeft = new THREE.Mesh(bootGeo, bootMat);
+        bootLeft.position.set(0, -0.60, -0.04);
+        bootLeft.castShadow = true;
+        this.kickerLeftLegGroup.add(bootLeft);
+
+        // Right Leg Group (pivot at hip y=0.65)
+        this.kickerRightLegGroup = new THREE.Group();
+        this.kickerRightLegGroup.position.set(0.13, 0.65, 0);
+        this.kickerGroup.add(this.kickerRightLegGroup);
+
         const rightThigh = new THREE.Mesh(thighGeo, skinMat);
-        rightThigh.position.set(0.13, 0.48, 0);
+        rightThigh.position.set(0, -0.17, 0);
         rightThigh.castShadow = true;
-        this.kickerGroup.add(rightThigh);
+        this.kickerRightLegGroup.add(rightThigh);
 
         this.kickerRightLeg = new THREE.Mesh(calfGeo, sockMat);
-        this.kickerRightLeg.position.set(0.13, 0.20, 0);
+        this.kickerRightLeg.position.set(0, -0.45, 0);
         this.kickerRightLeg.castShadow = true;
-        this.kickerGroup.add(this.kickerRightLeg);
-
-        // Cleats / Soccer Boots
-        const bootGeo = new THREE.BoxGeometry(0.11, 0.09, 0.24);
-        const bootLeft = new THREE.Mesh(bootGeo, bootMat);
-        bootLeft.position.set(-0.13, 0.05, 0.04);
-        bootLeft.castShadow = true;
-        this.kickerGroup.add(bootLeft);
+        this.kickerRightLegGroup.add(this.kickerRightLeg);
 
         const bootRight = new THREE.Mesh(bootGeo, bootMat);
-        bootRight.position.set(0.13, 0.05, 0.04);
+        bootRight.position.set(0, -0.60, -0.04);
         bootRight.castShadow = true;
-        this.kickerGroup.add(bootRight);
+        this.kickerRightLegGroup.add(bootRight);
 
-        this.kickerDefaultPos = new THREE.Vector3(0.75, 0, 13.6);
+        this.kickerDefaultPos = new THREE.Vector3(-0.75, 0, 13.6);
         this.kickerGroup.position.copy(this.kickerDefaultPos);
-        this.kickerGroup.rotation.y = -Math.PI / 10;
+        this.kickerGroup.rotation.y = 0.28;
         this.scene.add(this.kickerGroup);
 
         // Kicker Pitch Contact Shadow
@@ -2744,6 +2837,7 @@
         keeperTorso.position.y = 1.18;
         keeperTorso.castShadow = true;
         this.keeperGroup.add(keeperTorso);
+        this.keeperTorso = keeperTorso;
 
         // Head & Face
         const keeperHeadGroup = new THREE.Group();
@@ -2752,6 +2846,7 @@
         const keeperHeadBase = new THREE.Mesh(new THREE.SphereGeometry(0.19, 24, 24), skinMat);
         keeperHeadBase.castShadow = true;
         keeperHeadGroup.add(keeperHeadBase);
+        this.keeperHead = keeperHeadBase;
 
         const keeperFacePlane = new THREE.Mesh(new THREE.PlaneGeometry(0.25, 0.25), keeperFaceMat);
         keeperFacePlane.position.set(0, 0, 0.185);
@@ -2782,8 +2877,9 @@
         leftGlove.position.y = -0.50;
         leftGlove.castShadow = true;
         this.keeperLeftArm.add(leftGlove);
+        this.keeperLeftGlove = leftGlove;
 
-        this.keeperLeftArm.rotation.z = Math.PI / 2.8;
+        this.keeperLeftArm.rotation.z = -Math.PI / 2.8;
         this.keeperGroup.add(this.keeperLeftArm);
 
         // Goalkeeper Right Arm Group (Short Sleeve + Exposed Skin Arm + Glove)
@@ -2804,8 +2900,9 @@
         rightGlove.position.y = -0.50;
         rightGlove.castShadow = true;
         this.keeperRightArm.add(rightGlove);
+        this.keeperRightGlove = rightGlove;
 
-        this.keeperRightArm.rotation.z = -Math.PI / 2.8;
+        this.keeperRightArm.rotation.z = Math.PI / 2.8;
         this.keeperGroup.add(this.keeperRightArm);
 
         // Keeper Shorts & Legs
@@ -2819,11 +2916,13 @@
         keeperLeftLeg.position.set(-0.14, 0.35, 0);
         keeperLeftLeg.castShadow = true;
         this.keeperGroup.add(keeperLeftLeg);
+        this.keeperLeftLeg = keeperLeftLeg;
 
         const keeperRightLeg = new THREE.Mesh(keeperLegGeo, skinMat);
         keeperRightLeg.position.set(0.14, 0.35, 0);
         keeperRightLeg.castShadow = true;
         this.keeperGroup.add(keeperRightLeg);
+        this.keeperRightLeg = keeperRightLeg;
 
         const keeperBoots = new THREE.Mesh(bootGeo, gloveMat);
         keeperBoots.position.set(-0.14, 0.05, 0.04);
@@ -2980,50 +3079,119 @@
         document.getElementById('score-shots').innerText = this.shots;
       }
 
+      predictBallTrajectory() {
+        if (!this.pendingShot) return { x: 0, y: 0.9, flightTime: 0.5 };
+
+        // Clone initial state at kick moment
+        const pos = new THREE.Vector3(0, 0.22, 11.0);
+        const { horizAngle, velY, speedPower } = this.pendingShot;
+        const vel = new THREE.Vector3(horizAngle, velY, -speedPower);
+        const spin = this.ballSpin ? this.ballSpin.clone() : new THREE.Vector3(0, 0, 0);
+
+        const simDt = 0.008; // precise integration step
+        let totalTime = 0;
+
+        const airDensity = 1.225;
+        const ballRadius = 0.22;
+        const ballArea = Math.PI * ballRadius * ballRadius;
+        const Cd = 0.24;
+        const ballMass = 0.43;
+        const dragFactor = 0.5 * airDensity * Cd * ballArea / ballMass;
+        const Sm = 0.0125;
+
+        // Run until ball crosses goalkeeper plane z = 0.1 (or if it flies backwards/stalls, max time 3.0s)
+        while (pos.z > 0.1 && totalTime < 3.0) {
+          // 1. Drag
+          const speed = vel.length();
+          if (speed > 0.01) {
+            const dragAcc = vel.clone().multiplyScalar(-dragFactor * speed);
+            vel.addScaledVector(dragAcc, simDt);
+          }
+
+          // 2. Magnus
+          vel.x += -spin.y * vel.z * Sm * simDt;
+          vel.y += spin.x * vel.z * Sm * simDt;
+
+          // 3. Spin decay
+          spin.multiplyScalar(Math.exp(-0.18 * simDt));
+
+          // 4. Wind
+          vel.x += this.windX * simDt * 1.5;
+          vel.z += this.windZ * simDt * 1.0;
+
+          // 5. Gravity
+          vel.y += this.gravity * simDt;
+
+          // 6. Move
+          pos.x += vel.x * simDt;
+          pos.y += vel.y * simDt;
+          pos.z += vel.z * simDt;
+
+          totalTime += simDt;
+        }
+
+        return { x: pos.x, y: pos.y, flightTime: totalTime };
+      }
+
       triggerKeeperDive(shotX, shotSpeed) {
-        // Keeper reacts to shot trajectory with realistic decision-making
-        const rand = Math.random();
         let targetX = 0;
         let targetY = 0.9;
 
-        // Determine intended shot direction: left (shotX < -1.2), right (shotX > 1.2), or center
-        if (shotX < -1.2) {
-          // Ball going left
-          if (rand < 0.65) {
-            targetX = -2.8;
-            targetY = Math.random() > 0.5 ? 1.8 : 0.4;
-          } else if (rand < 0.85) {
-            targetX = 2.8; // guessed wrong side
-          } else {
-            targetX = 0; // stayed center
-          }
-        } else if (shotX > 1.2) {
-          // Ball going right
-          if (rand < 0.65) {
-            targetX = 2.8;
-            targetY = Math.random() > 0.5 ? 1.8 : 0.4;
-          } else if (rand < 0.85) {
-            targetX = -2.8; // guessed wrong side
-          } else {
-            targetX = 0; // stayed center
-          }
+        // Run the high-fidelity trajectory pre-simulation
+        const prediction = this.predictBallTrajectory();
+        const predictedX = prediction.x;
+        const predictedY = prediction.y;
+        const t_flight_to_keeper = prediction.flightTime;
+
+        if (this.isReplay && this.keeperTargetPos) {
+          targetX = this.keeperTargetPos.x;
+          targetY = this.keeperTargetPos.y;
         } else {
-          // Ball going center
-          if (rand < 0.60) {
-            targetX = (Math.random() - 0.5) * 1.2;
-            targetY = Math.random() > 0.5 ? 2.0 : 0.9;
-          } else if (rand < 0.80) {
-            targetX = -2.6;
+          // Goalkeeper AI makes decisions based on the randomized Save Chance (60% to 100%)
+          const saveRoll = Math.random() * 100;
+          const isSuccessfulGuess = saveRoll < this.gkSaveChance;
+
+          if (isSuccessfulGuess) {
+            // GUESS CORRECT: GK predicts the trajectory perfectly and dives EXACTLY to save the ball!
+            // Clamp targets within reachable goal boundaries (goal size is ~7.32m wide, 2.44m high)
+            targetX = THREE.MathUtils.clamp(predictedX, -3.4, 3.4);
+            targetY = THREE.MathUtils.clamp(predictedY, 0.2, 2.4);
           } else {
-            targetX = 2.6;
+            // GUESS WRONG: GK misreads the trajectory and dives to the wrong side or is completely fooled!
+            if (predictedX < -0.5) {
+              // Ball going left -> dive right
+              targetX = 2.4 + Math.random() * 1.0;
+              targetY = 0.4 + Math.random() * 1.6;
+            } else if (predictedX > 0.5) {
+              // Ball going right -> dive left
+              targetX = -2.4 - Math.random() * 1.0;
+              targetY = 0.4 + Math.random() * 1.6;
+            } else {
+              // Ball going center -> dive completely to one side at random
+              targetX = Math.random() > 0.5 ? 2.6 : -2.6;
+              targetY = 0.4 + Math.random() * 1.6;
+            }
           }
+
+          this.keeperTargetPos = new THREE.Vector3(targetX, targetY, 0.1);
         }
 
-        this.keeperTargetPos = new THREE.Vector3(targetX, targetY, 0.1);
         this.keeperDiving = true;
+        this.keeperTime = 0;
+        this.keeperState = 'DIVING';
+
+        // Compute exact physical velocity to arrive at target height/depth in a flight time of t_flight_to_keeper
+        // Clamp t_flight_to_keeper so the dive duration feels natural and visually realistic (not too sluggish/fast)
+        const t_reach = THREE.MathUtils.clamp(t_flight_to_keeper, 0.15, 1.2);
+        this.keeperVel.x = targetX / t_reach;
+        // Basic projectile kinematic equation: s = u*t + 0.5*a*t^2 => u = (s - 0.5*a*t^2) / t
+        this.keeperVel.y = (targetY) / t_reach - 0.5 * this.keeperGravity * t_reach;
+        this.keeperVel.z = 0;
       }
 
       resetPositions() {
+        this.lastBallPos = null;
+        this.resetNetPhysics();
         this.gameState = 'IDLE';
         this.crowdState = 'IDLE';
         this.runUpProgress = 0;
@@ -3035,6 +3203,8 @@
         const badge = document.getElementById('replay-badge');
         if (badge) badge.classList.remove('active');
 
+        this.gkSaveChance = Math.floor(25 + Math.random() * 51);
+
         this.updateWind();
 
         this.ballPos.set(0, 0.22, 11.0);
@@ -3044,17 +3214,30 @@
         this.ballSpin.set(0, 0, 0);
 
         this.kickerGroup.position.copy(this.kickerDefaultPos);
-        this.kickerGroup.rotation.set(0, -Math.PI / 10, 0);
+        this.kickerGroup.rotation.set(0, -0.28, 0);
         this.kickerRightLeg.rotation.set(0, 0, 0);
         this.kickerLeftLeg.rotation.set(0, 0, 0);
+        if (this.kickerRightLegGroup) this.kickerRightLegGroup.rotation.set(0, 0, 0);
+        if (this.kickerLeftLegGroup) this.kickerLeftLegGroup.rotation.set(0, 0, 0);
         this.kickerLeftArm.rotation.set(0, 0, Math.PI / 12);
         this.kickerRightArm.rotation.set(0, 0, -Math.PI / 12);
+        if (this.kickerHeadGroup) this.kickerHeadGroup.rotation.set(0, 0, 0);
 
         this.keeperGroup.position.copy(this.keeperDefaultPos);
-        this.keeperGroup.rotation.z = 0;
-        this.keeperLeftArm.rotation.z = Math.PI / 4;
-        this.keeperRightArm.rotation.z = -Math.PI / 4;
+        this.keeperGroup.rotation.set(0, 0, 0);
+        this.keeperLeftArm.rotation.set(0, 0, Math.PI / 4);
+        this.keeperRightArm.rotation.set(0, 0, -Math.PI / 4);
+        if (this.keeperLeftLeg) {
+          this.keeperLeftLeg.rotation.set(0, 0, 0);
+        }
+        if (this.keeperRightLeg) {
+          this.keeperRightLeg.rotation.set(0, 0, 0);
+        }
         this.keeperDiving = false;
+        this.keeperState = 'STANDING';
+        this.keeperVel.set(0, 0, 0);
+        this.keeperTime = 0;
+        this.keeperLandTime = 0;
 
         if (this.ballShadow) {
           this.ballShadow.position.set(0, 0.015, 11.0);
@@ -3111,17 +3294,30 @@
         this.ballSpin.set(0, 0, 0);
 
         this.kickerGroup.position.copy(this.kickerDefaultPos);
-        this.kickerGroup.rotation.set(0, -Math.PI / 10, 0);
+        this.kickerGroup.rotation.set(0, -0.28, 0);
         this.kickerRightLeg.rotation.set(0, 0, 0);
         this.kickerLeftLeg.rotation.set(0, 0, 0);
+        if (this.kickerRightLegGroup) this.kickerRightLegGroup.rotation.set(0, 0, 0);
+        if (this.kickerLeftLegGroup) this.kickerLeftLegGroup.rotation.set(0, 0, 0);
         this.kickerLeftArm.rotation.set(0, 0, Math.PI / 12);
         this.kickerRightArm.rotation.set(0, 0, -Math.PI / 12);
+        if (this.kickerHeadGroup) this.kickerHeadGroup.rotation.set(0, 0, 0);
 
         this.keeperGroup.position.copy(this.keeperDefaultPos);
-        this.keeperGroup.rotation.z = 0;
-        this.keeperLeftArm.rotation.z = Math.PI / 4;
-        this.keeperRightArm.rotation.z = -Math.PI / 4;
+        this.keeperGroup.rotation.set(0, 0, 0);
+        this.keeperLeftArm.rotation.set(0, 0, Math.PI / 4);
+        this.keeperRightArm.rotation.set(0, 0, -Math.PI / 4);
+        if (this.keeperLeftLeg) {
+          this.keeperLeftLeg.rotation.set(0, 0, 0);
+        }
+        if (this.keeperRightLeg) {
+          this.keeperRightLeg.rotation.set(0, 0, 0);
+        }
         this.keeperDiving = false;
+        this.keeperState = 'STANDING';
+        this.keeperVel.set(0, 0, 0);
+        this.keeperTime = 0;
+        this.keeperLandTime = 0;
 
         // Set dramatic Side-View Camera position
         // X = -9.2m to side of pitch, Y = 2.4m, Z = 6.0m midway between penalty spot and goal
@@ -3133,6 +3329,11 @@
         this.runUpProgress = 0;
         this.kickFollowThrough = 0;
         this.shotTimer = 0;
+
+        if (this.lastGoalShot.windX !== undefined) {
+          this.windX = this.lastGoalShot.windX;
+          this.windZ = this.lastGoalShot.windZ;
+        }
 
         if (this.lastGoalShot.keeperTarget) {
           this.keeperTargetPos = this.lastGoalShot.keeperTarget.clone();
@@ -3171,18 +3372,47 @@
       updatePhysics(dt) {
         // --- PLAYER RUN-UP ANIMATION BEFORE STRIKE ---
         if (this.gameState === 'RUNNING') {
-          this.runUpProgress += dt / 0.32; // ~0.32s run-up duration
+          this.runUpProgress += dt / 0.45; // ~0.45s run-up duration
           const t = Math.min(1.0, this.runUpProgress);
 
-          // Interpolate player position from start (0.75, 0, 13.6) towards ball (0.22, 0, 11.35)
-          this.kickerGroup.position.x = THREE.MathUtils.lerp(0.75, 0.22, t);
+          // Interpolate player position from start (-0.75, 0, 13.6) towards ball (-0.22, 0, 11.35)
+          this.kickerGroup.position.x = THREE.MathUtils.lerp(-0.75, -0.22, t);
           this.kickerGroup.position.z = THREE.MathUtils.lerp(13.6, 11.35, t);
-          this.kickerGroup.rotation.y = THREE.MathUtils.lerp(-Math.PI / 10, -Math.PI / 24, t);
+          
+          // Face the ball
+          const dx = this.ballPos.x - this.kickerGroup.position.x;
+          const dz = this.ballPos.z - this.kickerGroup.position.z;
+          this.kickerGroup.rotation.y = Math.atan2(dx, -dz);
+          
+          // Look down at the ball
+          if (this.kickerHeadGroup) {
+            const dist = Math.hypot(dx, dz);
+            const heightDiff = 1.68 - this.ballPos.y; // Kicker head is around y=1.68
+            this.kickerHeadGroup.rotation.x = -Math.atan2(heightDiff, dist);
+          }
 
-          // Dynamic running gait
-          const runCycle = t * Math.PI * 10;
-          this.kickerRightLeg.rotation.x = Math.sin(runCycle) * 0.8;
-          this.kickerLeftLeg.rotation.x = -Math.sin(runCycle) * 0.8;
+          // Dynamic running gait (rotating at the hip, bending knees on backswing for realism)
+          const runCycle = t * Math.PI * 4;
+          if (this.kickerRightLegGroup && this.kickerLeftLegGroup) {
+            this.kickerRightLegGroup.rotation.x = Math.sin(runCycle) * 0.8;
+            this.kickerLeftLegGroup.rotation.x = -Math.sin(runCycle) * 0.8;
+
+            // Natural knee bend on backward stride
+            if (Math.sin(runCycle) < 0) {
+              this.kickerRightLeg.rotation.x = Math.sin(runCycle) * 0.65;
+            } else {
+              this.kickerRightLeg.rotation.x = 0;
+            }
+
+            if (Math.sin(runCycle) > 0) {
+              this.kickerLeftLeg.rotation.x = -Math.sin(runCycle) * 0.65;
+            } else {
+              this.kickerLeftLeg.rotation.x = 0;
+            }
+          } else {
+            this.kickerRightLeg.rotation.x = Math.sin(runCycle) * 0.8;
+            this.kickerLeftLeg.rotation.x = -Math.sin(runCycle) * 0.8;
+          }
           this.kickerRightArm.rotation.x = -Math.sin(runCycle) * 0.7;
           this.kickerLeftArm.rotation.x = Math.sin(runCycle) * 0.7;
           this.kickerGroup.position.y = Math.abs(Math.sin(runCycle)) * 0.08;
@@ -3200,7 +3430,13 @@
 
             const { horizAngle, velY, speedPower } = this.pendingShot;
             this.ballVel.set(horizAngle, velY, -speedPower);
-            this.ballSpin.set((Math.random() - 0.5) * 5, -horizAngle * 0.6, 0);
+            
+            if (this.isReplay && this.pendingShot.ballSpin) {
+              this.ballSpin.copy(this.pendingShot.ballSpin);
+            } else {
+              this.ballSpin.set((Math.random() - 0.5) * 5, -horizAngle * 0.6, 0);
+              this.pendingShot.ballSpin = this.ballSpin.clone();
+            }
 
             // Trigger Goalkeeper AI Dive at exact impact moment
             this.triggerKeeperDive(horizAngle, speedPower);
@@ -3209,6 +3445,14 @@
         }
 
         if (this.gameState !== 'KICKED' && this.gameState !== 'RESULT') return;
+
+        // Set lastBallPos if it's not set yet
+        if (!this.lastBallPos) {
+          this.lastBallPos = new THREE.Vector3();
+          this.lastBallPos.copy(this.ballPos);
+        } else {
+          this.lastBallPos.copy(this.ballPos);
+        }
 
         // Shot timeout check
         if (this.gameState === 'KICKED') {
@@ -3220,14 +3464,38 @@
           }
         }
 
-        // Apply Magnus spin effect (curve)
-        this.ballVel.x += this.ballSpin.y * dt * 2.0;
+        // 1. Realistic Air Resistance (Drag)
+        const airDensity = 1.225; // kg/m^3
+        const ballRadius = 0.22;
+        const ballArea = Math.PI * ballRadius * ballRadius;
+        const Cd = 0.24; // Drag coefficient for a standard soccer ball
+        const ballMass = 0.43; // kg (standard Size 5 ball weight is ~410-450g)
+        const dragFactor = 0.5 * airDensity * Cd * ballArea / ballMass; // ~0.013
+        
+        const speed = this.ballVel.length();
+        if (speed > 0.01) {
+          const dragAcc = this.ballVel.clone().multiplyScalar(-dragFactor * speed);
+          this.ballVel.addScaledVector(dragAcc, dt);
+        }
 
-        // Apply Pitch Wind effect to trajectory
+        // 2. Realistic Magnus Curve Effect
+        // Magnus acceleration is proportional to (omega x velocity)
+        // Since velocity is predominantly along -Z, a clockwise y-spin (negative y) curves the ball to the left (negative X)
+        // A counter-clockwise y-spin (positive y) curves the ball to the right (positive X)
+        // A top spin (positive x) makes the ball dip (negative Y)
+        // A back spin (negative x) makes the ball lift (positive Y)
+        const Sm = 0.0125; // Magnus lift/curve coefficient
+        this.ballVel.x += -this.ballSpin.y * this.ballVel.z * Sm * dt;
+        this.ballVel.y += this.ballSpin.x * this.ballVel.z * Sm * dt;
+
+        // 3. Air Friction on Ball Spin (slow spin decay)
+        this.ballSpin.multiplyScalar(Math.exp(-0.18 * dt));
+
+        // 4. Pitch Wind effect to trajectory
         this.ballVel.x += this.windX * dt * 1.5;
         this.ballVel.z += this.windZ * dt * 1.0;
         
-        // Gravity
+        // 5. Gravity
         this.ballVel.y += this.gravity * dt;
 
         // Translate ball position
@@ -3284,10 +3552,10 @@
         // --- Surface Collision / Bounce ---
         if (this.ballPos.y <= currentFloorY) {
           this.ballPos.y = currentFloorY;
-          this.ballVel.y = Math.abs(this.ballVel.y) * 0.50 + (currentFloorY > 0.5 ? 0.4 : 0); // bounce off ground or grandstand steps
-          this.ballVel.x *= 0.75;
-          this.ballVel.z *= 0.75;
-          this.ballSpin.multiplyScalar(0.5);
+          this.ballVel.y = Math.abs(this.ballVel.y) * 0.78 + (currentFloorY > 0.5 ? 0.4 : 0); // bounce off ground or grandstand steps
+          this.ballVel.x *= 0.96;
+          this.ballVel.z *= 0.96;
+          this.ballSpin.multiplyScalar(0.92);
         }
 
         // --- LED Board Front Bounce (Outside goal width) ---
@@ -3303,29 +3571,29 @@
         // Traps and cushions the ball inside the net frame so it never pierces through the back or sides
         if (this.ballPos.z <= 0.1 && Math.abs(this.ballPos.x) < 3.66 && this.ballPos.y < 2.5) {
           // Back Net Boundary (Net mesh at z = -1.80m)
-          if (this.ballPos.z <= -1.60) {
-            this.ballPos.z = -1.60;
-            this.ballVel.z = Math.max(0, -this.ballVel.z * 0.2); // Bounces gently forward off net, cannot pass back net
-            this.ballVel.x *= 0.5;
-            this.ballVel.y *= 0.5;
-            this.ballSpin.multiplyScalar(0.3);
+          if (this.ballPos.z <= -1.74) {
+            this.ballPos.z = -1.74;
+            this.ballVel.z = Math.max(0, -this.ballVel.z * 0.15); // Bounces extremely gently forward off net
+            this.ballVel.x *= 0.4;
+            this.ballVel.y *= 0.4;
+            this.ballSpin.multiplyScalar(0.2);
             this.triggerCameraShake(0.38);
           }
           // Top Net Boundary (Net mesh at y = 2.44m)
-          if (this.ballPos.y >= 2.30 && this.ballPos.z < 0) {
-            this.ballPos.y = 2.30;
-            this.ballVel.y = -Math.abs(this.ballVel.y) * 0.3;
-            this.ballVel.z *= 0.6;
+          if (this.ballPos.y >= 2.38 && this.ballPos.z < 0) {
+            this.ballPos.y = 2.38;
+            this.ballVel.y = -Math.abs(this.ballVel.y) * 0.2;
+            this.ballVel.z *= 0.5;
           }
           // Left Net Boundary (Net mesh at x = -3.66m)
-          if (this.ballPos.x <= -3.48 && this.ballPos.z < 0) {
-            this.ballPos.x = -3.48;
-            this.ballVel.x = Math.abs(this.ballVel.x) * 0.3;
+          if (this.ballPos.x <= -3.58 && this.ballPos.z < 0) {
+            this.ballPos.x = -3.58;
+            this.ballVel.x = Math.abs(this.ballVel.x) * 0.2;
           }
           // Right Net Boundary (Net mesh at x = +3.66m)
-          if (this.ballPos.x >= 3.48 && this.ballPos.z < 0) {
-            this.ballPos.x = 3.48;
-            this.ballVel.x = -Math.abs(this.ballVel.x) * 0.3;
+          if (this.ballPos.x >= 3.58 && this.ballPos.z < 0) {
+            this.ballPos.x = 3.58;
+            this.ballVel.x = -Math.abs(this.ballVel.x) * 0.2;
           }
         }
 
@@ -3336,15 +3604,149 @@
         const goalHeight = 2.44;
 
         // 1. Keeper Save Check (Ball hits goalkeeper body/hands & deflects back)
-        const distToKeeper = this.ballPos.distanceTo(this.keeperGroup.position);
-        if (distToKeeper < 1.15 && this.ballPos.z > -0.5 && this.ballPos.z < 1.5) {
+        // Force update world matrices of the keeper group so we get precise world coords
+        this.keeperGroup.updateMatrixWorld(true);
+
+        const leftGlovePos = new THREE.Vector3();
+        if (this.keeperLeftGlove) this.keeperLeftGlove.getWorldPosition(leftGlovePos);
+
+        const rightGlovePos = new THREE.Vector3();
+        if (this.keeperRightGlove) this.keeperRightGlove.getWorldPosition(rightGlovePos);
+
+        const headPos = new THREE.Vector3();
+        if (this.keeperHead) this.keeperHead.getWorldPosition(headPos);
+
+        // Torso segment points in world space
+        const torsoBottom = new THREE.Vector3(0, 0.82, 0).applyMatrix4(this.keeperGroup.matrixWorld);
+        const torsoCenter = new THREE.Vector3(0, 1.18, 0).applyMatrix4(this.keeperGroup.matrixWorld);
+        const torsoTop = new THREE.Vector3(0, 1.54, 0).applyMatrix4(this.keeperGroup.matrixWorld);
+
+        // Legs in world space
+        const leftLegPos = new THREE.Vector3(-0.14, 0.35, 0).applyMatrix4(this.keeperGroup.matrixWorld);
+        const rightLegPos = new THREE.Vector3(0.14, 0.35, 0).applyMatrix4(this.keeperGroup.matrixWorld);
+
+        let hitPart = null;
+        let finalCollisionPos = null;
+
+        // A. Continuous Collision Detection (CCD) at goalkeeper's plane (z = 0.1)
+        const zPlane = this.keeperGroup.position.z; // usually 0.1
+        if (this.lastBallPos && this.lastBallPos.z >= zPlane && this.ballPos.z < zPlane) {
+          const totalZDist = Math.abs(this.lastBallPos.z - this.ballPos.z);
+          const t_cross = totalZDist > 0.001 ? (this.lastBallPos.z - zPlane) / totalZDist : 0;
+          const crossX = THREE.MathUtils.lerp(this.lastBallPos.x, this.ballPos.x, t_cross);
+          const crossY = THREE.MathUtils.lerp(this.lastBallPos.y, this.ballPos.y, t_cross);
+          const crossPos = new THREE.Vector3(crossX, crossY, zPlane);
+
+          // Calculate distance from crossing position to each body part
+          const distLeftGlove = this.keeperLeftGlove ? crossPos.distanceTo(leftGlovePos) : 999;
+          const distRightGlove = this.keeperRightGlove ? crossPos.distanceTo(rightGlovePos) : 999;
+          const distHead = this.keeperHead ? crossPos.distanceTo(headPos) : 999;
+          
+          const distTorsoBottom = crossPos.distanceTo(torsoBottom);
+          const distTorsoCenter = crossPos.distanceTo(torsoCenter);
+          const distTorsoTop = crossPos.distanceTo(torsoTop);
+          const distTorso = Math.min(distTorsoBottom, distTorsoCenter, distTorsoTop);
+
+          const distLeftLeg = crossPos.distanceTo(leftLegPos);
+          const distRightLeg = crossPos.distanceTo(rightLegPos);
+          const distLegs = Math.min(distLeftLeg, distRightLeg);
+
+          // Use slightly more generous bounds for exact plane crossing check to ensure high-speed saves register cleanly
+          if (distLeftGlove < 0.54) {
+            hitPart = 'LEFT_GLOVE';
+          } else if (distRightGlove < 0.54) {
+            hitPart = 'RIGHT_GLOVE';
+          } else if (distHead < 0.52) {
+            hitPart = 'HEAD';
+          } else if (distTorso < 0.65) {
+            hitPart = 'TORSO';
+          } else if (distLegs < 0.48) {
+            hitPart = 'LEGS';
+          }
+
+          if (hitPart !== null) {
+            finalCollisionPos = crossPos;
+          }
+        }
+
+        // B. Fallback Standard Distance Check (if ball is in close proximity but did not cross the plane in this frame)
+        if (hitPart === null && this.ballPos.z > -0.5 && this.ballPos.z < 1.5) {
+          const distLeftGlove = this.keeperLeftGlove ? this.ballPos.distanceTo(leftGlovePos) : 999;
+          const distRightGlove = this.keeperRightGlove ? this.ballPos.distanceTo(rightGlovePos) : 999;
+          const distHead = this.keeperHead ? this.ballPos.distanceTo(headPos) : 999;
+          
+          const distTorsoBottom = this.ballPos.distanceTo(torsoBottom);
+          const distTorsoCenter = this.ballPos.distanceTo(torsoCenter);
+          const distTorsoTop = this.ballPos.distanceTo(torsoTop);
+          const distTorso = Math.min(distTorsoBottom, distTorsoCenter, distTorsoTop);
+
+          const distLeftLeg = this.ballPos.distanceTo(leftLegPos);
+          const distRightLeg = this.ballPos.distanceTo(rightLegPos);
+          const distLegs = Math.min(distLeftLeg, distRightLeg);
+
+          if (distLeftGlove < 0.42) {
+            hitPart = 'LEFT_GLOVE';
+          } else if (distRightGlove < 0.42) {
+            hitPart = 'RIGHT_GLOVE';
+          } else if (distHead < 0.45) {
+            hitPart = 'HEAD';
+          } else if (distTorso < 0.56) {
+            hitPart = 'TORSO';
+          } else if (distLegs < 0.40) {
+            hitPart = 'LEGS';
+          }
+
+          if (hitPart !== null) {
+            finalCollisionPos = this.ballPos.clone();
+          }
+        }
+
+        if (hitPart !== null) {
           this.hasCollided = true;
-          soundEngine.playKick(); // Glove bounce impact sound
-          this.triggerCameraShake(0.52);
-          this.ballVel.z = Math.abs(this.ballVel.z) * 0.5 + 3.0; // Bounces back into penalty box
-          this.ballVel.x = (this.ballPos.x - this.keeperGroup.position.x) * 4.5 + (Math.random() - 0.5) * 2;
-          this.ballVel.y = Math.max(2.0, Math.abs(this.ballVel.y) * 0.5 + 1.2);
-          this.ballSpin.set((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, 0);
+          if (finalCollisionPos) {
+            this.ballPos.copy(finalCollisionPos);
+            this.ball.position.copy(this.ballPos);
+          }
+          soundEngine.playKick(); // Glove/body bounce impact sound
+          this.triggerCameraShake(0.55);
+
+          // Calculate precise deflection velocities based on which body part was hit
+          if (hitPart === 'LEFT_GLOVE') {
+            // Deflect wide left and back
+            this.ballVel.z = Math.abs(this.ballVel.z) * 0.4 + 2.0;
+            this.ballVel.x = -Math.abs(this.ballVel.x) * 0.6 - 3.5;
+            this.ballVel.y = Math.max(1.5, Math.abs(this.ballVel.y) * 0.4 + 1.0);
+          } else if (hitPart === 'RIGHT_GLOVE') {
+            // Deflect wide right and back
+            this.ballVel.z = Math.abs(this.ballVel.z) * 0.4 + 2.0;
+            this.ballVel.x = Math.abs(this.ballVel.x) * 0.6 + 3.5;
+            this.ballVel.y = Math.max(1.5, Math.abs(this.ballVel.y) * 0.4 + 1.0);
+          } else if (hitPart === 'HEAD') {
+            // Rebound high and straight back
+            this.ballVel.z = Math.abs(this.ballVel.z) * 0.6 + 3.0;
+            this.ballVel.x = (this.ballPos.x - headPos.x) * 3.0 + (Math.random() - 0.5) * 1.5;
+            this.ballVel.y = Math.max(3.0, Math.abs(this.ballVel.y) * 0.6 + 2.0);
+          } else if (hitPart === 'TORSO') {
+            // Chest block: rebound solid back
+            this.ballVel.z = Math.abs(this.ballVel.z) * 0.55 + 2.8;
+            this.ballVel.x = (this.ballPos.x - torsoCenter.x) * 4.0 + (Math.random() - 0.5) * 1.5;
+            this.ballVel.y = Math.max(2.0, Math.abs(this.ballVel.y) * 0.5 + 1.2);
+          } else if (hitPart === 'LEGS') {
+            // Leg block: low rebound
+            this.ballVel.z = Math.abs(this.ballVel.z) * 0.45 + 2.5;
+            this.ballVel.x = (this.ballPos.x - leftLegPos.x) * 3.0 + (Math.random() - 0.5) * 1.5;
+            this.ballVel.y = Math.max(0.8, -this.ballVel.y * 0.3 + 0.5);
+          }
+
+          // Add heavy spin to ball on save deflection
+          this.ballSpin.set((Math.random() - 0.5) * 15, (Math.random() - 0.5) * 15, 0);
+          
+          // Trigger physics pushback on keeper if mid-air (simulating momentum impact)
+          if (this.keeperState === 'DIVING') {
+            this.keeperVel.x -= this.ballVel.x * 0.12; // push back opposite to deflection
+            this.keeperVel.y -= 1.5; // push down towards ground
+          }
+
           this.triggerResult('SAVED');
           return;
         }
@@ -3392,6 +3794,156 @@
           this.hasCollided = true;
           this.triggerResult('MISSED');
         }
+
+        // Simulate Net Ragdoll & Wave Propagation
+        this.updateNetPhysics(dt);
+      }
+
+      updateNetPhysics(dt) {
+        if (!this.netPhysics || !this.netPhysics.meshes) return;
+
+        // Ensure timestep is stable under frame fluctuations
+        const fixedDt = Math.min(0.02, dt);
+
+        this.netPhysics.meshes.forEach(m => {
+          const mesh = m.mesh;
+          const posAttr = mesh.geometry.attributes.position;
+          const posArray = posAttr.array;
+          const originalPositions = m.originalPositions;
+          const velocities = m.velocities;
+          const widthSegments = m.widthSegments;
+          const heightSegments = m.heightSegments;
+          const count = posAttr.count;
+
+          // Convert global ball position and velocity into mesh's local coordinate system
+          const localBallPos = this.ballPos.clone().applyMatrix4(mesh.matrixWorld.clone().invert());
+          const localBallVel = this.ballVel.clone().transformDirection(mesh.matrixWorld.clone().invert());
+
+          // Step 1: Pre-cache current displacements from original positions to compute neighbor spring tensions
+          const dispX = new Float32Array(count);
+          const dispY = new Float32Array(count);
+          const dispZ = new Float32Array(count);
+          for (let i = 0; i < count; i++) {
+            dispX[i] = posArray[i * 3] - originalPositions[i * 3];
+            dispY[i] = posArray[i * 3 + 1] - originalPositions[i * 3 + 1];
+            dispZ[i] = posArray[i * 3 + 2] - originalPositions[i * 3 + 2];
+          }
+
+          // Step 2: Integrate vertex physics (restoring force + neighbor wave propagation + ball impact)
+          const pitch = widthSegments + 1;
+
+          for (let i = 0; i < count; i++) {
+            const col = i % pitch;
+            const row = Math.floor(i / pitch);
+
+            // Keep boundaries (outer edges) statically fixed to represent the rigid attachment to goal posts and ground
+            if (row === 0 || row === heightSegments || col === 0 || col === widthSegments) {
+              posArray[i * 3] = originalPositions[i * 3];
+              posArray[i * 3 + 1] = originalPositions[i * 3 + 1];
+              posArray[i * 3 + 2] = originalPositions[i * 3 + 2];
+              velocities[i * 3] = 0;
+              velocities[i * 3 + 1] = 0;
+              velocities[i * 3 + 2] = 0;
+              continue;
+            }
+
+            // A. Primary Restoring Spring Force pulling back to resting shape (Stiffness k = 12.0, Damping c = 1.2)
+            let fx = -12.0 * dispX[i] - 1.2 * velocities[i * 3];
+            let fy = -12.0 * dispY[i] - 1.2 * velocities[i * 3 + 1];
+            let fz = -12.0 * dispZ[i] - 1.2 * velocities[i * 3 + 2];
+
+            // B. Shear & Bending coupling force (stretches the net naturally, propagating ripple waves)
+            let sumDispX = 0, sumDispY = 0, sumDispZ = 0, neighborCount = 0;
+            if (col > 0) {
+              sumDispX += dispX[i - 1]; sumDispY += dispY[i - 1]; sumDispZ += dispZ[i - 1];
+              neighborCount++;
+            }
+            if (col < widthSegments) {
+              sumDispX += dispX[i + 1]; sumDispY += dispY[i + 1]; sumDispZ += dispZ[i + 1];
+              neighborCount++;
+            }
+            if (row > 0) {
+              sumDispX += dispX[i - pitch]; sumDispY += dispY[i - pitch]; sumDispZ += dispZ[i - pitch];
+              neighborCount++;
+            }
+            if (row < heightSegments) {
+              sumDispX += dispX[i + pitch]; sumDispY += dispY[i + pitch]; sumDispZ += dispZ[i + pitch];
+              neighborCount++;
+            }
+
+            if (neighborCount > 0) {
+              const tension = 20.0; // Neighbor coupling stiffness (more flexible for cloth/ragdoll behavior)
+              fx += tension * (sumDispX / neighborCount - dispX[i]);
+              fy += tension * (sumDispY / neighborCount - dispY[i]);
+              fz += tension * (sumDispZ / neighborCount - dispZ[i]);
+            }
+
+            // D. Add custom vertical gravity force for realistic sag and drape (ragdoll weight)
+            fy += -9.8 * 0.25;
+
+            // C. Dynamic ball physical impact collision detection (in local coordinate space)
+            const vx = posArray[i * 3];
+            const vy = posArray[i * 3 + 1];
+            const vz = posArray[i * 3 + 2];
+
+            const rx = vx - localBallPos.x;
+            const ry = vy - localBallPos.y;
+            const rz = vz - localBallPos.z;
+            const distToBall = Math.hypot(rx, ry, rz);
+
+            const collisionRadius = 0.42; // Includes some cushion/net indentation buffer
+            if (distToBall < collisionRadius) {
+              const penetration = collisionRadius - distToBall;
+              
+              // Direct outward bulging push force
+              const pushForce = penetration * 480.0;
+              const unitX = rx / (distToBall + 0.001);
+              const unitY = ry / (distToBall + 0.001);
+              const unitZ = rz / (distToBall + 0.001);
+
+              fx += unitX * pushForce;
+              fy += unitY * pushForce;
+              fz += unitZ * pushForce;
+
+              // Transfer ball's linear momentum directly to net vertices upon impact (high energy transfer)
+              const momentumTransferFactor = 7.5;
+              fx += localBallVel.x * momentumTransferFactor;
+              fy += localBallVel.y * momentumTransferFactor;
+              fz += localBallVel.z * momentumTransferFactor;
+            }
+
+            // D. Integrate velocity & position (Euler-Cromer)
+            velocities[i * 3] += fx * fixedDt;
+            velocities[i * 3 + 1] += fy * fixedDt;
+            velocities[i * 3 + 2] += fz * fixedDt;
+
+            posArray[i * 3] += velocities[i * 3] * fixedDt;
+            posArray[i * 3 + 1] += velocities[i * 3 + 1] * fixedDt;
+            posArray[i * 3 + 2] += velocities[i * 3 + 2] * fixedDt;
+          }
+
+          posAttr.needsUpdate = true;
+          mesh.geometry.computeVertexNormals();
+        });
+      }
+
+      resetNetPhysics() {
+        if (!this.netPhysics || !this.netPhysics.meshes) return;
+        this.netPhysics.meshes.forEach(m => {
+          const posAttr = m.mesh.geometry.attributes.position;
+          const posArray = posAttr.array;
+          const originalPositions = m.originalPositions;
+          for (let i = 0; i < originalPositions.length; i++) {
+            posArray[i] = originalPositions[i];
+          }
+          posAttr.needsUpdate = true;
+          m.mesh.geometry.computeVertexNormals();
+
+          // Reset velocities
+          for (let i = 0; i < m.velocities.length; i++) {
+            m.velocities[i] = 0;
+          }
+        });
       }
 
       triggerResult(type) {
@@ -3415,7 +3967,9 @@
           this.crowdState = 'JUMPING';
           this.lastGoalShot = {
             shot: { ...this.pendingShot },
-            keeperTarget: this.keeperTargetPos ? this.keeperTargetPos.clone() : null
+            keeperTarget: this.keeperTargetPos ? this.keeperTargetPos.clone() : null,
+            windX: this.windX,
+            windZ: this.windZ
           };
         } else if (type === 'SAVED') {
           this.saves++;
@@ -3431,7 +3985,9 @@
             horizAngle: this.pendingShot.horizAngle,
             velY: this.pendingShot.velY,
             speedPower: speedPower,
-            result: type
+            result: type,
+            x: this.ballPos.x,
+            y: this.ballPos.y
           });
         }
 
@@ -3496,8 +4052,8 @@
           // Goalkeeper bouncing & ready stance
           const bounceY = Math.abs(Math.sin(sec * 5)) * 0.04;
           this.keeperGroup.position.y = bounceY;
-          this.keeperLeftArm.rotation.z = Math.PI / 2.8 + Math.sin(sec * 5) * 0.06;
-          this.keeperRightArm.rotation.z = -Math.PI / 2.8 - Math.sin(sec * 5) * 0.06;
+          this.keeperLeftArm.rotation.z = -Math.PI / 2.8 - Math.sin(sec * 5) * 0.06;
+          this.keeperRightArm.rotation.z = Math.PI / 2.8 + Math.sin(sec * 5) * 0.06;
         }
 
         // --- KICKING FOLLOW-THROUGH ANIMATION ---
@@ -3506,10 +4062,32 @@
             this.kickFollowThrough = THREE.MathUtils.lerp(this.kickFollowThrough, 0, dt * 5);
           }
           const ft = this.kickFollowThrough || 0;
-          // Right kicking leg whip & follow-through
-          this.kickerRightLeg.rotation.x = THREE.MathUtils.lerp(this.kickerRightLeg.rotation.x, -Math.PI / 2.2 * ft, 0.25);
-          // Left planting leg braces ground
-          this.kickerLeftLeg.rotation.x = THREE.MathUtils.lerp(this.kickerLeftLeg.rotation.x, -0.15 * ft, 0.2);
+
+          // Get the power of the shot (speedPower ranges from 12 to 32)
+          const speedPower = (this.pendingShot && this.pendingShot.speedPower) ? this.pendingShot.speedPower : 20;
+          // Normalize to [0, 1] range
+          const powerFactor = THREE.MathUtils.clamp((speedPower - 12) / 20, 0, 1);
+          
+          // The harder the player kicks the ball, the higher her right leg goes for realism!
+          // Min power (12) results in max angle of -Math.PI / 4.2 (~43 deg)
+          // Max power (32) results in max angle of -Math.PI / 1.35 (~133 deg follow-through!)
+          const targetRightLegAngle = (Math.PI / 4.2 + powerFactor * (Math.PI / 1.35 - Math.PI / 4.2)) * ft;
+
+          if (this.kickerRightLegGroup && this.kickerLeftLegGroup) {
+            // Rotate the entire leg group at the hip joint
+            this.kickerRightLegGroup.rotation.x = THREE.MathUtils.lerp(this.kickerRightLegGroup.rotation.x, targetRightLegAngle, 0.25);
+            // Straighten/extend the knee (calf) naturally during high power follow-throughs
+            this.kickerRightLeg.rotation.x = THREE.MathUtils.lerp(this.kickerRightLeg.rotation.x, -0.12 * (1 - powerFactor) * ft, 0.25);
+
+            // Left planting leg braces ground, rotating slightly at the hip
+            this.kickerLeftLegGroup.rotation.x = THREE.MathUtils.lerp(this.kickerLeftLegGroup.rotation.x, -0.15 * ft, 0.2);
+            this.kickerLeftLeg.rotation.x = THREE.MathUtils.lerp(this.kickerLeftLeg.rotation.x, 0, 0.2);
+          } else {
+            // Fallback to original single-calf rotation
+            this.kickerRightLeg.rotation.x = THREE.MathUtils.lerp(this.kickerRightLeg.rotation.x, targetRightLegAngle, 0.25);
+            this.kickerLeftLeg.rotation.x = THREE.MathUtils.lerp(this.kickerLeftLeg.rotation.x, -0.15 * ft, 0.2);
+          }
+
           // Balance arm swing
           this.kickerLeftArm.rotation.z = THREE.MathUtils.lerp(this.kickerLeftArm.rotation.z, Math.PI / 2.5 * ft, 0.2);
           this.kickerRightArm.rotation.z = THREE.MathUtils.lerp(this.kickerRightArm.rotation.z, -Math.PI / 4 * ft, 0.2);
@@ -3518,16 +4096,85 @@
 
         // --- GOALKEEPER DIVING ANIMATION ---
         if (this.keeperDiving && this.keeperTargetPos) {
-          this.keeperGroup.position.lerp(this.keeperTargetPos, 0.14);
-          
-          // Full body horizontal roll & arm stretch
-          const isDiveLeft = this.keeperTargetPos.x < 0;
-          const targetRoll = (isDiveLeft ? 1 : -1) * Math.PI / 3.5;
-          this.keeperGroup.rotation.z = THREE.MathUtils.lerp(this.keeperGroup.rotation.z, targetRoll, 0.15);
-          
-          // Extend arms toward ball
-          this.keeperLeftArm.rotation.z = THREE.MathUtils.lerp(this.keeperLeftArm.rotation.z, isDiveLeft ? Math.PI / 2 : 0, 0.2);
-          this.keeperRightArm.rotation.z = THREE.MathUtils.lerp(this.keeperRightArm.rotation.z, isDiveLeft ? 0 : -Math.PI / 2, 0.2);
+          if (this.keeperState === 'DIVING') {
+            this.keeperTime += dt;
+            
+            // Apply physical movement: velocity + gravity
+            this.keeperVel.y += this.keeperGravity * dt;
+            this.keeperGroup.position.x += this.keeperVel.x * dt;
+            // Clamp horizontal position so keeper does not fly far past the goal
+            this.keeperGroup.position.x = THREE.MathUtils.clamp(this.keeperGroup.position.x, -4.5, 4.5);
+            this.keeperGroup.position.y += this.keeperVel.y * dt;
+            this.keeperGroup.position.z += this.keeperVel.z * dt;
+            
+            const isDiveLeft = this.keeperTargetPos.x < 0;
+            const t_reach = 0.42;
+
+            // Roll body sideways towards dive direction (0 to 75 degrees in air)
+            const airRoll = (isDiveLeft ? 1 : -1) * (Math.PI / 2.5) * Math.min(1.0, this.keeperTime / t_reach);
+            this.keeperGroup.rotation.z = THREE.MathUtils.lerp(this.keeperGroup.rotation.z, airRoll, 0.2);
+            
+            // Reaching arms towards ball/target to block it physically!
+            this.keeperLeftArm.rotation.z = THREE.MathUtils.lerp(this.keeperLeftArm.rotation.z, isDiveLeft ? -Math.PI * 0.7 : -Math.PI / 6, 0.2);
+            this.keeperRightArm.rotation.z = THREE.MathUtils.lerp(this.keeperRightArm.rotation.z, isDiveLeft ? Math.PI / 6 : Math.PI * 0.7, 0.2);
+            this.keeperLeftArm.rotation.x = THREE.MathUtils.lerp(this.keeperLeftArm.rotation.x, 0, 0.2);
+            this.keeperRightArm.rotation.x = THREE.MathUtils.lerp(this.keeperRightArm.rotation.x, 0, 0.2);
+
+            // Legs stretch dynamically in air
+            if (this.keeperLeftLeg && this.keeperRightLeg) {
+              this.keeperLeftLeg.rotation.z = THREE.MathUtils.lerp(this.keeperLeftLeg.rotation.z, isDiveLeft ? -Math.PI / 8 : Math.PI / 12, 0.2);
+              this.keeperRightLeg.rotation.z = THREE.MathUtils.lerp(this.keeperRightLeg.rotation.z, isDiveLeft ? -Math.PI / 12 : Math.PI / 8, 0.2);
+              this.keeperLeftLeg.rotation.x = THREE.MathUtils.lerp(this.keeperLeftLeg.rotation.x, 0.1, 0.2);
+              this.keeperRightLeg.rotation.x = THREE.MathUtils.lerp(this.keeperRightLeg.rotation.x, -0.1, 0.2);
+            }
+
+            // Ground threshold check:
+            // When rotated sideways, their body center is at Y ≈ 0.22.
+            if (this.keeperGroup.position.y <= 0.25 && this.keeperTime > 0.15) {
+              this.keeperGroup.position.y = 0.25;
+              this.keeperState = 'LANDED';
+              this.keeperLandTime = 0;
+              this.keeperVel.x *= 0.55; // Friction upon hitting turf
+              this.keeperVel.y = Math.abs(this.keeperVel.y) * 0.22; // Small realistic physical bounce on impact!
+            }
+          } else if (this.keeperState === 'LANDED') {
+            this.keeperLandTime += dt;
+            
+            // Apply physical sliding & landing bounce
+            this.keeperVel.y += this.keeperGravity * dt;
+            this.keeperGroup.position.x += this.keeperVel.x * dt;
+            this.keeperGroup.position.x = THREE.MathUtils.clamp(this.keeperGroup.position.x, -4.5, 4.5);
+            this.keeperGroup.position.y += this.keeperVel.y * dt;
+            
+            if (this.keeperGroup.position.y <= 0.22) {
+              this.keeperGroup.position.y = 0.22;
+              this.keeperVel.y = 0;
+              this.keeperVel.x = THREE.MathUtils.lerp(this.keeperVel.x, 0, dt * 6.5); // ground sliding friction
+            }
+
+            const isDiveLeft = this.keeperTargetPos.x < 0;
+            // Fully roll to 90 degrees flat on floor upon landing!
+            const landRoll = (isDiveLeft ? 1 : -1) * (Math.PI / 2.0);
+            this.keeperGroup.rotation.z = THREE.MathUtils.lerp(this.keeperGroup.rotation.z, landRoll, 0.15);
+
+            // Twist slightly forward/backward to simulate dynamic impact landing ragdoll
+            const landPitch = 0.18; // slightly rotated face-down
+            this.keeperGroup.rotation.x = THREE.MathUtils.lerp(this.keeperGroup.rotation.x, landPitch, 0.12);
+
+            // Ragdoll loose sprawling arms
+            this.keeperLeftArm.rotation.z = THREE.MathUtils.lerp(this.keeperLeftArm.rotation.z, isDiveLeft ? -Math.PI * 0.85 : -Math.PI / 3, 0.12);
+            this.keeperRightArm.rotation.z = THREE.MathUtils.lerp(this.keeperRightArm.rotation.z, isDiveLeft ? Math.PI / 3 : Math.PI * 0.85, 0.12);
+            this.keeperLeftArm.rotation.x = THREE.MathUtils.lerp(this.keeperLeftArm.rotation.x, 0.4, 0.12);
+            this.keeperRightArm.rotation.x = THREE.MathUtils.lerp(this.keeperRightArm.rotation.x, -0.4, 0.12);
+
+            // Ragdoll floppy sprawling legs on landing
+            if (this.keeperLeftLeg && this.keeperRightLeg) {
+              this.keeperLeftLeg.rotation.z = THREE.MathUtils.lerp(this.keeperLeftLeg.rotation.z, isDiveLeft ? -Math.PI * 0.22 : Math.PI * 0.25, 0.12);
+              this.keeperRightLeg.rotation.z = THREE.MathUtils.lerp(this.keeperRightLeg.rotation.z, isDiveLeft ? -Math.PI * 0.25 : Math.PI * 0.22, 0.12);
+              this.keeperLeftLeg.rotation.x = THREE.MathUtils.lerp(this.keeperLeftLeg.rotation.x, 0.45, 0.12);
+              this.keeperRightLeg.rotation.x = THREE.MathUtils.lerp(this.keeperRightLeg.rotation.x, -0.25, 0.12);
+            }
+          }
         }
 
         // --- CONTACT SHADOW UPDATES ---
