@@ -404,85 +404,56 @@
     }
 
     .game-title {
-      font-size: clamp(24px, 6.5vw, 30px);
+      font-size: clamp(28px, 8vw, 36px);
       font-weight: 900;
-      font-style: italic;
-      text-transform: uppercase;
-      line-height: 1.1;
+      color: #171717;
       letter-spacing: -0.5px;
-      color: #111827;
-      margin-bottom: 2px;
+      font-style: italic;
     }
 
     .title-accent {
-      color: #db2777;
-    }
-
-    .player-card-preview {
-      background: #fdf2f8;
-      border: 1px solid #fbcfe8;
-      border-radius: 18px;
-      padding: 12px 16px;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      width: 100%;
-      text-align: left;
-      box-sizing: border-box;
+      color: #ec4899;
     }
 
     .avatar-circle {
-      width: 44px;
-      height: 44px;
+      width: 52px;
+      height: 52px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #004d98, #a50044);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-size: 20px;
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
       flex-shrink: 0;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    }
+    
+    .player-card-preview {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 18px;
+      background: #fdf2f8;
+      border: 1px solid #fbcfe8;
+      box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.8);
     }
 
     .player-name {
       font-size: 15px;
       font-weight: 900;
-      color: #1e1b4b;
-      letter-spacing: 0.3px;
+      color: #111827;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .player-sub {
       font-size: 12px;
-      color: #db2777;
       font-weight: 700;
+      color: #db2777;
     }
 
-    .instructions-card {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 16px;
-      padding: 12px 16px;
-      width: 100%;
-      text-align: left;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      box-sizing: border-box;
-    }
-
-    .instructions-title {
-      font-size: 11px;
-      font-weight: 900;
-      letter-spacing: 0.8px;
-      color: #0284c7;
-      text-transform: uppercase;
-    }
-
-    .instructions-text {
-      font-size: 13.5px;
-      color: #374151;
+    .instruction-text {
+      font-size: 14px;
+      color: #334155;
       line-height: 1.45;
-      font-weight: 600;
+      font-weight: 700;
     }
 
     /* Vibrant Green Button */
@@ -502,7 +473,7 @@
       transition: all 0.15s ease;
       box-sizing: border-box;
     }
-
+    
     .btn-primary:active {
       transform: translateY(5px);
       box-shadow: 0 3px 0 #15803d, 0 8px 16px rgba(34, 197, 94, 0.25);
@@ -527,10 +498,11 @@
 
     /* Goal Modal Styling - Gold/Pink Celebration */
     .modal-card-gold {
-      background: linear-gradient(160deg, #2e1065, #0f172a);
+      background: rgba(251, 191, 36, 0.15);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
       color: #ffffff;
-      border: 2px solid #fbbf24;
-      border-bottom: 6px solid #f59e0b;
+      border: 1px solid rgba(251, 191, 36, 0.5);
       box-shadow: 0 20px 60px rgba(251, 191, 36, 0.35);
     }
 
@@ -579,22 +551,25 @@
     }
 
     .btn-gold {
-      background: linear-gradient(135deg, #f59e0b, #d97706);
-      color: #1e1b4b;
-      box-shadow: 0 6px 0 #b45309, 0 10px 20px rgba(245, 158, 11, 0.35);
+      background: rgba(245, 158, 11, 0.3);
+      border: 1px solid rgba(245, 158, 11, 0.6);
+      color: #ffffff;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      box-shadow: 0 10px 30px rgba(245, 158, 11, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.2);
     }
 
     .btn-gold:active {
       transform: translateY(4px);
-      box-shadow: 0 2px 0 #b45309;
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2), inset 0 1px 2px rgba(255, 255, 255, 0.2);
     }
 
     /* Fail Modal Styling */
     .modal-card-fail {
-      background: #1e293b;
+      background: rgba(239, 68, 68, 0.15);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
       color: #ffffff;
-      border: 2px solid #ef4444;
-      border-bottom: 6px solid #b91c1c;
+      border: 1px solid rgba(239, 68, 68, 0.5);
       box-shadow: 0 20px 50px rgba(239, 68, 68, 0.3);
     }
 
@@ -614,22 +589,24 @@
     }
 
     .btn-retry-style {
-      background: #475569;
+      background: rgba(71, 85, 105, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.3);
       color: #ffffff;
-      box-shadow: 0 6px 0 #1e293b, 0 10px 20px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.1);
     }
 
     .btn-retry-style:active {
       transform: translateY(4px);
-      box-shadow: 0 2px 0 #1e293b;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 2px rgba(255, 255, 255, 0.1);
     }
 
     /* Stats Modal Styling */
     .modal-card-stats {
-      background: #0f172a;
+      background: rgba(56, 189, 248, 0.15);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
       color: #ffffff;
-      border: 2px solid #38bdf8;
-      border-bottom: 6px solid #0284c7;
+      border: 1px solid rgba(56, 189, 248, 0.5);
       box-shadow: 0 20px 60px rgba(56, 189, 248, 0.35);
       max-width: 360px;
       width: 100%;
@@ -854,7 +831,7 @@
           <img src="raiza_barca.png" style="width: 100%; height: 100%; object-fit: cover;" alt="Raiza">
         </div>
         <div>
-          <div class="player-name">RAIZA TANIA #13</div>
+          <div class="player-name">TANIA #13</div>
           <div class="player-sub">Star Striker • FC Barcelona</div>
         </div>
       </div>
@@ -1481,7 +1458,7 @@
       ctx.fillStyle = '#facc15';
       ctx.font = '900 52px Outfit, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('RAIZA TANIA', 256, 110);
+      ctx.fillText('TANIA', 256, 110);
 
       // Squad Number: "13"
       ctx.font = '900 220px Outfit, sans-serif';
@@ -1540,9 +1517,24 @@
       }
 
       ctx.fillStyle = '#ffffff';
-      ctx.font = '900 36px Outfit, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('GK • BARÇA', 256, 260);
+      ctx.textBaseline = 'middle';
+      
+      // +Z is the Front of the Keeper (facing the Kicker). Cylinder wraps starting at +Z.
+      // So x=0 and x=512 is the FRONT.
+      // -Z is the Back of the Keeper. x=256 is the BACK.
+      
+      // FRONT (+Z)
+      ctx.font = '900 72px Outfit, sans-serif';
+      ctx.fillText('23', 0, 250);
+      ctx.fillText('23', 512, 250);
+      
+      // BACK (-Z)
+      ctx.font = '900 72px Outfit, sans-serif';
+      ctx.fillText('23', 256, 230);
+      
+      ctx.font = '700 28px Outfit, sans-serif';
+      ctx.fillText('AREOLA', 256, 290);
 
       return new THREE.CanvasTexture(canvas);
     }
@@ -2856,6 +2848,28 @@
         const keeperHair = new THREE.Mesh(new THREE.SphereGeometry(0.195, 20, 20, 0, Math.PI * 2, 0, Math.PI * 0.5), hairMat);
         keeperHair.castShadow = true;
         keeperHeadGroup.add(keeperHair);
+
+        
+        // Nametag
+        const nameCanvas = document.createElement('canvas');
+        nameCanvas.width = 256;
+        nameCanvas.height = 64;
+        const nameCtx = nameCanvas.getContext('2d');
+        nameCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        nameCtx.roundRect(0, 0, 256, 64, 16);
+        nameCtx.fill();
+        nameCtx.fillStyle = '#ffffff';
+        nameCtx.font = 'bold 32px sans-serif';
+        nameCtx.textAlign = 'center';
+        nameCtx.textBaseline = 'middle';
+        nameCtx.fillText('Areola', 128, 32);
+        
+        const nameTex = new THREE.CanvasTexture(nameCanvas);
+        const nameMat = new THREE.SpriteMaterial({ map: nameTex, transparent: true });
+        const nameSprite = new THREE.Sprite(nameMat);
+        nameSprite.scale.set(1.4, 0.35, 1);
+        nameSprite.position.y = 0.55;
+        keeperHeadGroup.add(nameSprite);
 
         this.keeperGroup.add(keeperHeadGroup);
 
